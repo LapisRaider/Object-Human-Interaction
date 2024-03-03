@@ -6,14 +6,16 @@ interactable_objs:
 
 # for object detection
 yolo_params:
-    checkpoint_file: "Weights/yolov8l.pt"
+    checkpoint_file: "Data/yolov8x.pt"
+
+    dataset_file: "Data/coco.yaml"
 
     # obj below will not be included
-    confidence_score: 0.5
+    confidence_score: 0
 
     # measure of area overlap between two bounding box. 0 (no overlap) to 1 (complete overlap).
     # If got overlap (amt >= value) we will disregard the bounding box with lower confidence score
-    intersection_over_union: 0.7
+    intersection_over_union: 0.75
 
     # can use cuda:{gpuIndex} or cpu
     device: "cuda:0"
