@@ -8,15 +8,15 @@ from deep_sort.deep_sort.tracker import Tracker as DeepsortTracker
 from deep_sort.deep_sort.track import TrackState
 from deep_sort.tools import generate_detections as gdet
 
-from utils import CreateVideo
+from utils import DrawBox
 
 class DetectedObj:
-    def __init__(self, _id, _bbox, _conf, _className):
+    def __init__(self, _id, _bbox, _oriBBox, _conf, _className):
         self.bbox = _bbox # in xyxy format
+        self.originalBbox = _oriBBox
         self.conf = _conf
         self.className = _className
         self.id = _id
-
 
 # Detect and track certain class objs throughout the frames
 class VideoObjDetector:
@@ -29,7 +29,6 @@ class VideoObjDetector:
     def DetectObjs(self, _yoloModel, _yoloConfigs, _deepSortConfigs):
         video = cv2.VideoCapture(self.vidFilePath)
 
-
         # DeepSORT -> Initializing tracker.
         max_cosine_distance = _deepSortConfigs["max_distance"]
         distanceMode = 'cosine' if _deepSortConfigs["use_cosine_distance"] else 'euclidean'
@@ -39,16 +38,8 @@ class VideoObjDetector:
         metric = nn_matching.NearestNeighborDistanceMetric(distanceMode, max_cosine_distance, nn_budget)
         deepsortTracker = DeepsortTracker(metric)
 
-        videoFps = int(video.get(cv2.CAP_PROP_FPS))
-        videoWidth = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
-        videoHeight = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        videoTotalFrames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-        outputFolder = 'Output'
-        vidName = 'Clip'
-        currentClip = CreateVideo(f"{outputFolder}/{vidName}" , "FullClip.mp4", videoFps, videoWidth, videoHeight)
-
-
         # read frames and track objects
+        currFrame = 0
         while True:
             hasFrames, vidFrameData = video.read() # gives in BGR format
             if not hasFrames:
@@ -84,31 +75,30 @@ class VideoObjDetector:
             deepsortTracker.predict()
             deepsortTracker.update(detections)
 
+            self.objsInFrames.append([])
             for track in deepsortTracker.tracks:
                 # track is inactive
-                if not track.is_confirmed() or track.time_since_update > 1:
+                if not track.is_confirmed() or track.time_since_update > 2:
                     continue
 
-                self.DrawBoundingBox(vidFrameData, track.to_tlbr())
+                detectedObj = DetectedObj(
+                    track.track_id, 
+                    track.to_tlbr(), 
+                    track.initialDetectionData["bbox"], 
+                    track.initialDetectionData["score"], 
+                    track.initialDetectionData["class"]
+                    )
+
+                self.objsInFrames[currFrame].append(detectedObj)
             
-            currentClip.write(vidFrameData)
-
-        currentClip.release()
-
-
-            
-
+            currFrame += 1
     
-    # bbox in xyxy format
-    def DrawBoundingBox(self, _frame, _bbox):
-        x1, y1, x2, y2 = map(int, _bbox[:4])
-
-        #draw bounding box
-        color = [0, 255, 0]
-        thickness = 1
-        cv2.rectangle(_frame, (x1, y1), (x2, y2), color, thickness)
-
-
+    def DrawDetectedObjs(self, _frame, _frameIndex):
+        for obj in self.objsInFrames[_frameIndex]:
+            DrawBox(_frame, obj.bbox, [0, 255, 0], 2)
+            DrawBox(_frame, obj.originalBbox, [255, 0, 0], 1)
+            cv2.putText(_frame, f'id: {obj.id}', (int(obj.bbox[0]), int(obj.bbox[1]) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            cv2.putText(_frame, f'class: {obj.className}', (int(obj.bbox[0]), int(obj.bbox[1]) + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
 
 
