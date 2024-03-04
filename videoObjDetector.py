@@ -36,7 +36,12 @@ class VideoObjDetector:
         model_filename = _deepSortConfigs["checkpoint_file"]
         encoder = gdet.create_box_encoder(model_filename, batch_size=1)
         metric = nn_matching.NearestNeighborDistanceMetric(distanceMode, max_cosine_distance, nn_budget)
-        deepsortTracker = DeepsortTracker(metric)
+        deepsortTracker = DeepsortTracker(
+            metric,
+            _deepSortConfigs["max_iou_distance"],
+            _deepSortConfigs["max_age"],
+            _deepSortConfigs["n_init"],
+            )
 
         # read frames and track objects
         currFrame = 0

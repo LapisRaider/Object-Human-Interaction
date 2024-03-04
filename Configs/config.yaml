@@ -28,4 +28,12 @@ deepsort_params:
     use_cosine_distance: True
 
     # higher max_cosing_distance value means less restrictive, larger values are considered invalid
-    max_distance: 0.6
+    max_distance: 0.7
+
+    # predicted location vs actual location
+    max_iou_distance: 0.8
+
+    # no of frames to keep an id alive
+    max_age: 40
+
+    n_init: 3
