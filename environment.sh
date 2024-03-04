@@ -13,3 +13,7 @@ conda install pyyaml
 
 # yolov8 for object classification
 pip install ultralytics==8.1.0
+
+#object tracking
+pip install tensorflow
+git clone https://github.com/LapisRaider/deep_sort.git

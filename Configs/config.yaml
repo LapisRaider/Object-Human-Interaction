@@ -11,7 +11,7 @@ yolo_params:
     dataset_file: "Data/coco.yaml"
 
     # obj below will not be included
-    confidence_score: 0
+    confidence_score: 0.5
 
     # measure of area overlap between two bounding box. 0 (no overlap) to 1 (complete overlap).
     # If got overlap (amt >= value) we will disregard the bounding box with lower confidence score
@@ -19,3 +19,13 @@ yolo_params:
 
     # can use cuda:{gpuIndex} or cpu
     device: "cuda:0"
+
+# Deepsort, Object tracking model, settings
+deepsort_params:
+    checkpoint_file: "./Data/mars-small128.pb"
+
+    # if false, uses euclidean distance
+    use_cosine_distance: True
+
+    # higher max_cosing_distance value means less restrictive, larger values are considered invalid
+    max_distance: 0.6
