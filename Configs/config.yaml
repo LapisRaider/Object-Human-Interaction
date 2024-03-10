@@ -30,10 +30,11 @@ deepsort_params:
     # higher max_cosing_distance value means less restrictive, larger values are considered invalid
     max_distance: 0.7
 
-    # predicted location vs actual location
-    max_iou_distance: 0.8
+    # maximum allowavle overlap. So if 0.8, it means overlap from current detection and previous has to be 80%
+    max_iou_distance: 0.7
 
-    # no of frames to keep an id alive
+    # Maximum number of missed misses before a track is deleted.
     max_age: 40
 
-    n_init: 3
+    # Number of frames that a track remains in initialization phase.
+    n_init: 1

@@ -104,7 +104,7 @@ class VideoObjDetector:
             DrawBox(_frame, obj.originalBbox, [255, 0, 0], 1)
             cv2.putText(_frame, f'id: {obj.id}', (int(obj.bbox[0]), int(obj.bbox[1]) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
             cv2.putText(_frame, f'c: {obj.className}', (int(obj.bbox[0]), int(obj.bbox[1]) + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-            cv2.putText(_frame, f's: {obj.score}', (int(obj.bbox[0]), int(obj.bbox[1]) + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            cv2.putText(_frame, f's: {obj.conf}', (int(obj.bbox[0]), int(obj.bbox[1]) + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
 
 
