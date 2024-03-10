@@ -11,7 +11,7 @@ yolo_params:
     dataset_file: "Data/coco.yaml"
 
     # obj below will not be included
-    confidence_score: 0.5
+    confidence_score: 0.2
 
     # measure of area overlap between two bounding box. 0 (no overlap) to 1 (complete overlap).
     # If got overlap (amt >= value) we will disregard the bounding box with lower confidence score
