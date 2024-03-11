@@ -9,6 +9,7 @@ from deep_sort.deep_sort.track import TrackState
 from deep_sort.tools import generate_detections as gdet
 
 from utils import DrawBox
+from videoDrawer import VideoDrawer
 
 class DetectedObj:
     def __init__(self, _id, _bbox, _oriBBox, _conf, _className):
@@ -19,15 +20,15 @@ class DetectedObj:
         self.id = _id
 
 # Detect and track certain class objs throughout the frames
-class VideoObjDetector:
+class VideoObjDetector(VideoDrawer):
     def __init__(self, _vidFilePath, _classIds = None):
         self.vidFilePath = _vidFilePath
         self.classIds = _classIds
         self.objsInFrames = [] # a double array of Detected Objs in each frame
 
 
-    def DetectObjs(self, _yoloModel, _yoloConfigs, _deepSortConfigs):
-        video = cv2.VideoCapture(self.vidFilePath)
+    def DetectObjs(self, _yoloModel, _yoloConfigs, _deepSortConfigs, _drawDebug = True, _debugOutputFolder = ""):
+        self.StartVideo(self.vidFilePath, _drawDebug, _debugOutputFolder)
 
         # DeepSORT -> Initializing tracker.
         max_cosine_distance = _deepSortConfigs["max_distance"]
@@ -46,9 +47,8 @@ class VideoObjDetector:
         # read frames and track objects
         currFrame = 0
         while True:
-            hasFrames, vidFrameData = video.read() # gives in BGR format
+            hasFrames, vidFrameData = self.video.read() # gives in BGR format
             if not hasFrames:
-                video.release()
                 break
 
             results = _yoloModel.predict(
@@ -83,7 +83,7 @@ class VideoObjDetector:
             self.objsInFrames.append([])
             for track in deepsortTracker.tracks:
                 # track is inactive
-                if not track.is_confirmed() or track.time_since_update > 2:
+                if not track.is_confirmed() or track.time_since_update > 1:
                     continue
 
                 detectedObj = DetectedObj(
@@ -96,9 +96,16 @@ class VideoObjDetector:
 
                 self.objsInFrames[currFrame].append(detectedObj)
             
+            if _drawDebug:
+                self.DrawOnClip(vidFrameData, currFrame)
+
             currFrame += 1
-    
-    def DrawDetectedObjs(self, _frame, _frameIndex):
+        
+        self.ReleaseNewClipRecording()
+        self.StopVideo()
+
+
+    def Draw(self, _frame, _frameIndex):
         for obj in self.objsInFrames[_frameIndex]:
             DrawBox(_frame, obj.bbox, [0, 255, 0], 2)
             DrawBox(_frame, obj.originalBbox, [255, 0, 0], 1)

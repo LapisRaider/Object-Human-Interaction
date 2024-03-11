@@ -17,30 +17,12 @@ configs = None
 def main(_videoPath):
     yoloModel = YOLO(configs["yolo_params"]["checkpoint_file"])
 
+    # detect + track objs
     objDetector = VideoObjDetector(_videoPath, [0, 32])
-    objDetector.DetectObjs(yoloModel, configs["yolo_params"], configs["deepsort_params"])
+    objDetector.DetectObjs(yoloModel, configs["yolo_params"], configs["deepsort_params"], True, configs["output_folder_dir_path"])
 
-    video = cv2.VideoCapture(_videoPath)
-    videoFps = int(video.get(cv2.CAP_PROP_FPS))
-    videoWidth = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
-    videoHeight = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    videoTotalFrames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-    outputFolder = 'Output'
-    vidName = 'Clip'
-    currentClip = CreateVideo(f"{outputFolder}/{vidName}" , "FullClip.mp4", videoFps, videoWidth, videoHeight)
+    # check collision between objs and human
 
-    frameIndex = 0
-    while True:
-        hasFrames, vidFrameData = video.read() # gives in BGR format
-        if not hasFrames:
-            video.release()
-            break
-
-        objDetector.DrawDetectedObjs(vidFrameData, frameIndex)
-        currentClip.write(vidFrameData)
-        frameIndex += 1
-
-    currentClip.release()
         
 
 
