@@ -5,6 +5,8 @@ import argparse
 import torch
 from ultralytics import YOLO
 from videoObjDetector import VideoObjDetector
+from videoDrawer import VideoDrawer
+from videoEntityCollisionDetector import VideoEntityCollisionDetector
 
 from utils import CreateVideo
 
@@ -17,11 +19,39 @@ configs = None
 def main(_videoPath):
     yoloModel = YOLO(configs["yolo_params"]["checkpoint_file"])
 
-    # detect + track objs
-    objDetector = VideoObjDetector(_videoPath, [0, 32])
-    objDetector.DetectObjs(yoloModel, configs["yolo_params"], configs["deepsort_params"], True, configs["output_folder_dir_path"])
+    videoDrawer = VideoDrawer(_videoPath)
+    objDetectionClip = videoDrawer.CreateNewClip(configs["output_folder_dir_path"], "objDetection")
+    collisionClip = videoDrawer.CreateNewClip(configs["output_folder_dir_path"], "collision")
 
-    # check collision between objs and human
+    objDetector = VideoObjDetector(configs["deepsort_params"], [0, 32])
+    objsInFrames = {}
+
+    objCollisionChecker = VideoEntityCollisionDetector([32])
+    objCollisions = {}
+
+    currFrame = 0
+    while True:
+        hasFrames, vidFrameData = videoDrawer.video.read() # gives in BGR format
+        if not hasFrames:
+            break
+
+        # detect + track objs
+        objsInFrames[currFrame] = objDetector.DetectObjs(vidFrameData, yoloModel, configs["yolo_params"])
+        newFrame = vidFrameData.copy()
+        objDetector.Draw(newFrame, objsInFrames[currFrame])
+        objDetectionClip.write(newFrame)
+
+        # check collision between objs and human
+        objCollisions[currFrame] = objCollisionChecker.CheckCollision(objsInFrames[currFrame])
+        newFrame = vidFrameData.copy()
+        objCollisionChecker.Draw(newFrame, objCollisions[currFrame])
+        collisionClip.write(newFrame)
+
+        currFrame += 1
+
+    videoDrawer.StopVideo()
+    objDetectionClip.release()
+    collisionClip.release()
 
         
 

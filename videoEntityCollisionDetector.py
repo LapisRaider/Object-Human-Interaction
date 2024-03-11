@@ -4,8 +4,7 @@ import random
 class VideoEntityCollisionDetector:
 
     # entities to check with all other entities
-    def __init__(self, _entityClasses, _noOfFrames = 0):
-        self.noOfFrames = _noOfFrames
+    def __init__(self, _entityClasses):
         self.entityClasses = _entityClasses;
 
     """
@@ -33,7 +32,7 @@ class VideoEntityCollisionDetector:
         return collision
 
 
-    def DrawCollision(self, _frame, _collisionEntities):
+    def Draw(self, _frame, _collisionEntities):
         for entity, others in _collisionEntities.items():
             random.seed(entity.id)
             color = [random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)]

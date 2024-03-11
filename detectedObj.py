@@ -6,8 +6,10 @@ class DetectedObj:
         self.className = _className
         self.id = _id
 
-    def collidesWith(self, other):
-        x_intersect = (self.minX < other.maxX) and (other.minX < self.maxX)
-        y_intersect = (self.minY < other.maxY) and (other.minY < self.maxY)
+    def collidesWith(self, _other):
+        minX, minY, maxX, maxY = self.bbox
+        otherMinX, otherMinY, otherMaxX, otherMaxY = _other.bbox
+        x_intersect = (minX < otherMaxX) and (otherMinX < maxX)
+        y_intersect = (minY < otherMaxY) and (otherMinY < maxY)
 
         return x_intersect and y_intersect

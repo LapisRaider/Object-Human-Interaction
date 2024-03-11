@@ -11,7 +11,7 @@ yolo_params:
     dataset_file: "Data/coco.yaml"
 
     # obj below will not be included
-    confidence_score: 0.2
+    confidence_score: 0.1
 
     # measure of area overlap between two bounding box. 0 (no overlap) to 1 (complete overlap).
     # If got overlap (amt >= value) we will disregard the bounding box with lower confidence score
@@ -34,7 +34,7 @@ deepsort_params:
     max_iou_distance: 0.7
 
     # Maximum number of missed misses before a track is deleted.
-    max_age: 40
+    max_age: 30
 
     # Number of frames that a track remains in initialization phase.
     n_init: 1
