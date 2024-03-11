@@ -26,7 +26,6 @@ class VideoDrawer(ABC):
     def Draw(self, _frame, _frameIndex = 0):
         pass
 
-
     def DrawOnClip(self, _vidFrame, _frameIndex = 0):
         self.Draw(_vidFrame, _frameIndex)
         self.currentClip.write(_vidFrame)

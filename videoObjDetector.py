@@ -10,14 +10,7 @@ from deep_sort.tools import generate_detections as gdet
 
 from utils import DrawBox
 from videoDrawer import VideoDrawer
-
-class DetectedObj:
-    def __init__(self, _id, _bbox, _oriBBox, _conf, _className):
-        self.bbox = _bbox # in xyxy format
-        self.originalBbox = _oriBBox
-        self.conf = _conf
-        self.className = _className
-        self.id = _id
+from detectedObj import DetectedObj
 
 # Detect and track certain class objs throughout the frames
 class VideoObjDetector(VideoDrawer):
