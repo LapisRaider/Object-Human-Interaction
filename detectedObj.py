@@ -13,3 +13,18 @@ class DetectedObj:
         y_intersect = (minY < otherMaxY) and (otherMinY < maxY)
 
         return x_intersect and y_intersect
+    
+    def ConvertBboxToCenterWidthHeight(self):
+        # Extract coordinates from bbox
+        minX, minY, maxX, maxY = self.bbox
+
+        # Calculate center coordinates (c_x, c_y)
+        c_x = (minX + maxX) / 2
+        c_y = (minY + maxY) / 2
+
+        # Calculate height h
+        h = maxY - minY
+        w = maxX - minX
+
+        # Return as numpy array in shape (4,)
+        return [c_x, c_y, h, w]

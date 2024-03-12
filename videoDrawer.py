@@ -20,5 +20,11 @@ class VideoDrawer:
 
         return CreateVideo(f"{_outputFolder}/{vidName}" , f"{_vidName}.mp4", self.videoFps, self.videoWidth, self.videoHeight)
 
+    def GetFilePath(self, _outputFolder = ""):
+        videoFileName = os.path.basename(self.videoPath)
+        vidName, vidFileExtension = os.path.splitext(videoFileName)
+
+        return f"{_outputFolder}/{vidName}"
+
     def StopVideo(self):
         self.video.release()

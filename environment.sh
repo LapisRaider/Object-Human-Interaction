@@ -19,13 +19,13 @@ pip install tensorflow
 git clone https://github.com/LapisRaider/deep_sort.git
 
 # for vibe
-git clone https://github.com/TypeDefinition/VIBE-Object.git
+git clone https://github.com/TypeDefinition/VIBE-Object.git Rendering
 
 pip install tqdm
 pip install yacs
 pip install h5py
 pip install scipy
-pip install numpy
+pip install numpy==1.23
 pip install smplx
 pip install gdown
 pip install PyYAML
@@ -44,10 +44,12 @@ pip install scikit-video
 pip install opencv-python
 pip install llvmlite
 pip install pytube
+pip install chumpy
+pip install wget
 conda install ffmpeg
 
-mkdir VIBE-Object/data
-cd VIBE-Object/data
+mkdir Rendering/data
+cd Rendering/data
 gdown "https://drive.google.com/uc?id=1untXhYOLQtpNEy4GTY_0fL_H-k6cTf_r"
 unzip vibe_data.zip
 rm vibe_data.zip

@@ -10,6 +10,11 @@ from videoEntityCollisionDetector import VideoEntityCollisionDetector
 
 from utils import CreateVideo
 
+import sys
+sys.path.insert(0, 'Rendering')
+from vidSMPLParamCreator import PreProcessPersonData, VidSMPLParamCreator
+
+
 yoloModel = None
 availableObjs = None
 yoloClassNameIndexMap = None
@@ -37,23 +42,45 @@ def main(_videoPath):
 
         # detect + track objs
         objsInFrames[currFrame] = objDetector.DetectObjs(vidFrameData, yoloModel, configs["yolo_params"])
-        newFrame = vidFrameData.copy()
-        objDetector.Draw(newFrame, objsInFrames[currFrame])
-        objDetectionClip.write(newFrame)
+        # newFrame = vidFrameData.copy()
+        # objDetector.Draw(newFrame, objsInFrames[currFrame])
+        # objDetectionClip.write(newFrame)
 
         # check collision between objs and human
-        objCollisions[currFrame] = objCollisionChecker.CheckCollision(objsInFrames[currFrame])
-        newFrame = vidFrameData.copy()
-        objCollisionChecker.Draw(newFrame, objCollisions[currFrame])
-        collisionClip.write(newFrame)
+        # objCollisions[currFrame] = objCollisionChecker.CheckCollision(objsInFrames[currFrame])
+        # newFrame = vidFrameData.copy()
+        # objCollisionChecker.Draw(newFrame, objCollisions[currFrame])
+        # collisionClip.write(newFrame)      
 
-        #draw and attach 3D models
+        #get proper positions of the objects against the humans
 
         currFrame += 1
 
     videoDrawer.StopVideo()
     objDetectionClip.release()
     collisionClip.release()
+
+    # create SMPL parameters
+    humans = {}
+    for frameNo, objInFrame in objsInFrames.items():
+        for obj in objInFrame:
+            if obj.className == 0:
+                if obj.id not in humans:
+                    humans[obj.id] = PreProcessPersonData([], None, [], obj.id)
+                
+                humans[obj.id].bboxes.append(obj.bbox)
+                # humans[obj.id].joints2D.append(obj.bbox)
+                humans[obj.id].frames.append(frameNo)
+    
+    print(_videoPath)
+    smplParamCreator = VidSMPLParamCreator(_videoPath, configs["vibe_params"])
+    smplParamCreator.processPeopleInVid(humans.values(), videoDrawer.GetFilePath(configs["output_folder_dir_path"]))
+
+    del smplParamCreator
+    del humans
+
+
+
 
         
 
@@ -84,7 +111,7 @@ def drawBoundary():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Your application's description")
-    parser.add_argument("--input", default='Input/video1.mp4', type=str, help="File path for video")
+    parser.add_argument("--input", default='Input/clip_1.mp4', type=str, help="File path for video")
     parser.add_argument("--config", default='Configs/config.yaml', type=str, help="File path for config file")
 
     arguments = parser.parse_args()
