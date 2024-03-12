@@ -38,3 +38,15 @@ deepsort_params:
 
     # Number of frames that a track remains in initialization phase.
     n_init: 1
+
+vibe_params:
+    checkpoint_file: ""
+
+    batch_size: 17
+
+    runSimplify: True
+
+    # Use 1 euro filter to smooth the results
+    smooth_results: True
+    smooth_min_cutoff: 0.004
+    smooth_beta: 1.5

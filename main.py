@@ -47,6 +47,8 @@ def main(_videoPath):
         objCollisionChecker.Draw(newFrame, objCollisions[currFrame])
         collisionClip.write(newFrame)
 
+        #draw and attach 3D models
+
         currFrame += 1
 
     videoDrawer.StopVideo()
