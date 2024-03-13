@@ -38,6 +38,7 @@ def main(_videoPath):
     objCollisionChecker = VideoEntityCollisionDetector([32])
     objCollisions = {}
 
+    print("Pre-process: Detect objects and possible collision between objects and humans")
     currFrame = 0
     while True:
         hasFrames, vidFrameData = videoDrawer.video.read() # gives in BGR format
@@ -59,35 +60,43 @@ def main(_videoPath):
         #get proper positions of the objects against the humans
 
         currFrame += 1
+        print(f"processed frame {currFrame}/{videoDrawer.videoTotalFrames}")
 
     videoDrawer.StopVideo()
     objDetectionClip.release()
     collisionClip.release()
+    print("Pre-process stage done, videos stored")
+
 
     # create SMPL parameters
-    humans = {}
-    for frameNo, objInFrame in objsInFrames.items():
-        for obj in objInFrame:
-            if obj.className == 0:
-                if obj.id not in humans:
-                    humans[obj.id] = PreProcessPersonData([], None, [], obj.id)
+    print("Creating SMPL parameters from humans in video for every frame")
+    # humans = {}
+    # for frameNo, objInFrame in objsInFrames.items():
+    #     for obj in objInFrame:
+    #         if obj.className == 0:
+    #             if obj.id not in humans:
+    #                 humans[obj.id] = PreProcessPersonData([], None, [], obj.id)
                 
-                humans[obj.id].bboxes.append(obj.ConvertBboxToCenterWidthHeight())
-                # humans[obj.id].joints2D.append(obj.bbox)
-                humans[obj.id].frames.append(frameNo)
+    #             humans[obj.id].bboxes.append(obj.ConvertBboxToCenterWidthHeight())
+    #             # humans[obj.id].joints2D.append(obj.bbox)
+    #             humans[obj.id].frames.append(frameNo)
     
-    print(_videoPath)
-    smplParamCreator = VidSMPLParamCreator(_videoPath, configs["vibe_params"])
-    humanRenderData = smplParamCreator.processPeopleInVid(humans.values(), videoDrawer.outputPath)
+    # print(_videoPath)
+    # smplParamCreator = VidSMPLParamCreator(_videoPath, configs["vibe_params"])
+    # humanRenderData = smplParamCreator.processPeopleInVid(humans.values(), videoDrawer.outputPath)
 
-    del smplParamCreator
-    del humans
+    # del smplParamCreator
+    # del humans
+    print("PKL file created in output folder")
 
     # read the parameters of each human
     # for the objects find the nearest point to attach to or render
 
     # render the objects and humans
-    render(videoDrawer, humanRenderData)
+    print("Render Objects and humans")
+    objData = {key: [obj for obj in objs if obj.className != 0] for key, objs in objsInFrames.items()}
+    render(videoDrawer, None, objData)
+    print("Render done")
 
 
 '''
@@ -104,13 +113,13 @@ def main(_videoPath):
 
         ]
 '''
-def render(_videoInfo, _humanRenderData, _objRenderData = None):
+def render(_videoInfo, _humanRenderData = None, _objRenderData = None):
     # for loop the objs in frame, render it
-    renderer = Renderer(resolution=(_videoInfo.videoWidth, _videoInfo.videoHeight), orig_img=True, wireframe=True, renderOnWhite=True)
+    renderer = Renderer(resolution=(_videoInfo.videoWidth, _videoInfo.videoHeight), orig_img=True, wireframe=False, renderOnWhite=True)
 
     # dictionary, {frameNo: {humanId: verts, cam, joints3D, pose} }
-    frame_results = prepare_rendering_results(_humanRenderData, _videoInfo.videoTotalFrames)
-    mesh_color = {k: colorsys.hsv_to_rgb(np.random.rand(), 0.5, 1.0) for k in _humanRenderData.keys()}
+    # frame_results = prepare_rendering_results(_humanRenderData, _videoInfo.videoTotalFrames)
+    # mesh_color = {k: colorsys.hsv_to_rgb(np.random.rand(), 0.5, 1.0) for k in _humanRenderData.keys()}
 
     renderClip = _videoInfo.CreateNewClip("render")
 
@@ -118,26 +127,45 @@ def render(_videoInfo, _humanRenderData, _objRenderData = None):
         img = None
 
         # render people in video 
-        for person_id, person_data in frame_results[frameIndex].items():
-            frame_verts = person_data['verts']
-            frame_cam = person_data['cam']
-            # [VIBE-Object Start]
-            frame_joints3d = person_data['joints3d']
-            frame_pose = person_data['pose']
-            # [VIBE-Object End]
+        # for person_id, person_data in frame_results[frameIndex].items():
+        #     frame_verts = person_data['verts']
+        #     frame_cam = person_data['cam']
+        #     # [VIBE-Object Start]
+        #     frame_joints3d = person_data['joints3d']
+        #     frame_pose = person_data['pose']
+        #     # [VIBE-Object End]
 
-            mc = mesh_color[person_id]
+        #     mc = mesh_color[person_id]
             
-            # Add camera to scene.
-            renderer.push_cam(frame_cam)
+        #     # Add camera to scene.
+        #     renderer.push_cam(frame_cam)
 
-            # Add human to scene.
-            renderer.push_human(verts=frame_verts, color=mc)
+        #     # Add human to scene.
+        #     renderer.push_human(verts=frame_verts, color=mc)
+
+        #     img = renderer.pop_and_render(img)
+
+        # obj to render
+        for obj in _objRenderData[frameIndex]:
+            objCxCy = obj.ConvertBboxToCenterWidthHeight()
+            print("An Obj is being rendered")
+
+            renderer.push_cam([1,1, 0, 0])
+
+            renderer.push_obj(
+                '3D_Models/sphere.obj',
+                translation= [0, 0, 0],
+                angle=0,
+                axis=[0,0,0],
+                scale=[1, 1, 1],
+                color=[1.0, 0.0, 0.0],
+            )
 
             img = renderer.pop_and_render(img)
 
         renderClip.write(img)
-    
+        print(f"processed render for frame {frameIndex}/{_videoInfo.videoTotalFrames}")
+
     renderClip.release()
 
         
@@ -169,7 +197,7 @@ def drawBoundary():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Your application's description")
-    parser.add_argument("--input", default='Input/clip_1.mp4', type=str, help="File path for video")
+    parser.add_argument("--input", default='Input/video11.mp4', type=str, help="File path for video")
     parser.add_argument("--config", default='Configs/config.yaml', type=str, help="File path for config file")
     parser.add_argument("--pkl", default='Output/clip_1.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
 
