@@ -1,3 +1,5 @@
+import numpy as np
+
 class DetectedObj:
     def __init__(self, _id, _bbox, _oriBBox, _conf, _className):
         self.bbox = _bbox # in xyxy format
@@ -18,13 +20,15 @@ class DetectedObj:
         # Extract coordinates from bbox
         minX, minY, maxX, maxY = self.bbox
 
-        # Calculate center coordinates (c_x, c_y)
-        c_x = (minX + maxX) / 2
-        c_y = (minY + maxY) / 2
-
         # Calculate height h
         h = maxY - minY
         w = maxX - minX
 
+        # Calculate center coordinates (c_x, c_y)
+        c_x = minX + w/2
+        c_y = minY + h/2
+
+        w = h = np.where(w / h > 1, w, h)
+
         # Return as numpy array in shape (4,)
-        return [c_x, c_y, h, w]
+        return [c_x, c_y, w, h]

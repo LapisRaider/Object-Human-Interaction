@@ -72,7 +72,7 @@ def main(_videoPath):
                 if obj.id not in humans:
                     humans[obj.id] = PreProcessPersonData([], None, [], obj.id)
                 
-                humans[obj.id].bboxes.append(obj.bbox)
+                humans[obj.id].bboxes.append(obj.ConvertBboxToCenterWidthHeight())
                 # humans[obj.id].joints2D.append(obj.bbox)
                 humans[obj.id].frames.append(frameNo)
     
@@ -171,6 +171,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Your application's description")
     parser.add_argument("--input", default='Input/clip_1.mp4', type=str, help="File path for video")
     parser.add_argument("--config", default='Configs/config.yaml', type=str, help="File path for config file")
+    parser.add_argument("--pkl", default='Output/clip_1.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+
 
     arguments = parser.parse_args()
     
