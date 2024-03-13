@@ -7,26 +7,30 @@ from ultralytics import YOLO
 from videoObjDetector import VideoObjDetector
 from videoDrawer import VideoDrawer
 from videoEntityCollisionDetector import VideoEntityCollisionDetector
+import colorsys
+import numpy as np
 
 from utils import CreateVideo
 
 import sys
 sys.path.insert(0, 'Rendering')
 from vidSMPLParamCreator import PreProcessPersonData, VidSMPLParamCreator
-
+from lib.utils.renderer import Renderer
+from lib.utils.demo_utils import (
+    prepare_rendering_results,
+)
 
 yoloModel = None
 availableObjs = None
 yoloClassNameIndexMap = None
 configs = None
 
-
 def main(_videoPath):
     yoloModel = YOLO(configs["yolo_params"]["checkpoint_file"])
 
-    videoDrawer = VideoDrawer(_videoPath)
-    objDetectionClip = videoDrawer.CreateNewClip(configs["output_folder_dir_path"], "objDetection")
-    collisionClip = videoDrawer.CreateNewClip(configs["output_folder_dir_path"], "collision")
+    videoDrawer = VideoDrawer(_videoPath, configs["output_folder_dir_path"])
+    objDetectionClip = videoDrawer.CreateNewClip("objDetection")
+    collisionClip = videoDrawer.CreateNewClip("collision")
 
     objDetector = VideoObjDetector(configs["deepsort_params"], [0, 32])
     objsInFrames = {}
@@ -74,13 +78,67 @@ def main(_videoPath):
     
     print(_videoPath)
     smplParamCreator = VidSMPLParamCreator(_videoPath, configs["vibe_params"])
-    smplParamCreator.processPeopleInVid(humans.values(), videoDrawer.GetFilePath(configs["output_folder_dir_path"]))
+    humanRenderData = smplParamCreator.processPeopleInVid(humans.values(), videoDrawer.outputPath)
 
     del smplParamCreator
     del humans
 
+    # read the parameters of each human
+    # for the objects find the nearest point to attach to or render
+
+    # render the objects and humans
+    render(videoDrawer, humanRenderData)
 
 
+'''
+    arguments:
+        _humanRenderData: [{
+            bboxes = [[cx, cy, h, w] ...]
+            joints2D = []
+            frames = [frame number the person appears in]
+            id = person identification number
+        }...] Array of people objects
+
+        _objRenderData: [
+        
+
+        ]
+'''
+def render(_videoInfo, _humanRenderData, _objRenderData = None):
+    # for loop the objs in frame, render it
+    renderer = Renderer(resolution=(_videoInfo.videoWidth, _videoInfo.videoHeight), orig_img=True, wireframe=True, renderOnWhite=True)
+
+    # dictionary, {frameNo: {humanId: verts, cam, joints3D, pose} }
+    frame_results = prepare_rendering_results(_humanRenderData, _videoInfo.videoTotalFrames)
+    mesh_color = {k: colorsys.hsv_to_rgb(np.random.rand(), 0.5, 1.0) for k in _humanRenderData.keys()}
+
+    renderClip = _videoInfo.CreateNewClip("render")
+
+    for frameIndex in range(0, _videoInfo.videoTotalFrames):
+        img = None
+
+        # render people in video 
+        for person_id, person_data in frame_results[frameIndex].items():
+            frame_verts = person_data['verts']
+            frame_cam = person_data['cam']
+            # [VIBE-Object Start]
+            frame_joints3d = person_data['joints3d']
+            frame_pose = person_data['pose']
+            # [VIBE-Object End]
+
+            mc = mesh_color[person_id]
+            
+            # Add camera to scene.
+            renderer.push_cam(frame_cam)
+
+            # Add human to scene.
+            renderer.push_human(verts=frame_verts, color=mc)
+
+            img = renderer.pop_and_render(img)
+
+        renderClip.write(img)
+    
+    renderClip.release()
 
         
 
