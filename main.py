@@ -34,7 +34,8 @@ def main(args):
     objDetector = None
     objDetectionClip = None
     collisionClip = None
-    if args.detectionPKL != '':
+
+    if args.detectionPKL == '':
         yoloModel = YOLO(configs["yolo_params"]["checkpoint_file"])
         objDetectionClip = videoDrawer.CreateNewClip("objDetection")
         objDetector = VideoObjDetector(configs["deepsort_params"], [0, 32])
@@ -44,7 +45,7 @@ def main(args):
 
     objCollisions = {}
     objCollisionChecker = None
-    if args.collisionDetectionPKL != '':
+    if args.collisionDetectionPKL == '':
         collisionClip = videoDrawer.CreateNewClip("collision")
         objCollisionChecker = VideoEntityCollisionDetector([32])
     else:
@@ -91,7 +92,7 @@ def main(args):
     print("Pre-process stage done, videos stored and checkpoint files created")
     print("Creating SMPL parameters from humans in video for every frame")
     humanRenderData = None
-    if args.smplPKL != '':
+    if args.smplPKL == '':
         humans = {}
         for frameNo, objInFrame in objsInFrames.items():
             for obj in objInFrame:
@@ -173,14 +174,15 @@ def render(_videoInfo, _humanRenderData = None, _objRenderData = None):
             objCxCy = obj.ConvertBboxToCenterWidthHeight()
             
             renderer.push_default_cam()
+            print(objCxCy)
             location = renderer.screenspace_to_worldspace(objCxCy[0], objCxCy[1])
 
             renderer.push_obj(
-                '3D_Models/monkey.obj',
-                translation= [location[0], location[1], location[2]],
+                '3D_Models/sphere.obj',
+                translation= [location[0], location[1], 1],
                 angle=0,
-                axis=[1,1,1],
-                scale=[1, 1, 1],
+                axis=[0,0,0],
+                scale=[0.2, 0.2, 0.2],
                 color=[1.0, 0.0, 0.0],
             )
 
@@ -242,9 +244,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Your application's description")
     parser.add_argument("--input", default='Input/video11.mp4', type=str, help="File path for video")
     parser.add_argument("--config", default='Configs/config.yaml', type=str, help="File path for config file")
-    parser.add_argument("--smplPKL", default='Output/clip_1.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
-    parser.add_argument("--detectionPKL", default='Output/detected.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
-    parser.add_argument("--collisionDetectionPKL", default='Output/object_collisions.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+    parser.add_argument("--smplPKL", default='Output/video11/vibe_output.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+    parser.add_argument("--detectionPKL", default='Output/video11/detected.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+    parser.add_argument("--collisionDetectionPKL", default='Output/video11/object_collisions.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
 
 
     arguments = parser.parse_args()
@@ -255,8 +257,8 @@ if __name__ == "__main__":
     availableObjs = configs.get("interactable_objs", {})
     
     # loadYolo(configs["yolo_params"])
-    # main(arguments)
-    videoDrawer = VideoDrawer("Input/video11.mp4", configs["output_folder_dir_path"])
-    render_obj(videoDrawer)
+    main(arguments)
+    # videoDrawer = VideoDrawer("Input/video11.mp4", configs["output_folder_dir_path"])
+    # render_obj(videoDrawer)
     
 
