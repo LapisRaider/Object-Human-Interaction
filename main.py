@@ -9,6 +9,8 @@ from videoDrawer import VideoDrawer
 from videoEntityCollisionDetector import VideoEntityCollisionDetector
 import colorsys
 import numpy as np
+import pickle
+import joblib
 
 from utils import CreateVideo
 
@@ -25,18 +27,29 @@ availableObjs = None
 yoloClassNameIndexMap = None
 configs = None
 
-def main(_videoPath):
-    yoloModel = YOLO(configs["yolo_params"]["checkpoint_file"])
+def main(args):
+    videoDrawer = VideoDrawer(args.input, configs["output_folder_dir_path"])
 
-    videoDrawer = VideoDrawer(_videoPath, configs["output_folder_dir_path"])
-    objDetectionClip = videoDrawer.CreateNewClip("objDetection")
-    collisionClip = videoDrawer.CreateNewClip("collision")
-
-    objDetector = VideoObjDetector(configs["deepsort_params"], [0, 32])
     objsInFrames = {}
+    objDetector = None
+    objDetectionClip = None
+    collisionClip = None
+    if args.detectionPKL != '':
+        yoloModel = YOLO(configs["yolo_params"]["checkpoint_file"])
+        objDetectionClip = videoDrawer.CreateNewClip("objDetection")
+        objDetector = VideoObjDetector(configs["deepsort_params"], [0, 32])
+    else:
+        with open(args.detectionPKL, 'rb') as f:
+            objsInFrames = pickle.load(f)
 
-    objCollisionChecker = VideoEntityCollisionDetector([32])
     objCollisions = {}
+    objCollisionChecker = None
+    if args.collisionDetectionPKL != '':
+        collisionClip = videoDrawer.CreateNewClip("collision")
+        objCollisionChecker = VideoEntityCollisionDetector([32])
+    else:
+        with open(args.collisionDetectionPKL, 'rb') as f:
+            objCollisions = pickle.load(f)
 
     print("Pre-process: Detect objects and possible collision between objects and humans")
     currFrame = 0
@@ -46,48 +59,59 @@ def main(_videoPath):
             break
 
         # detect + track objs
-        objsInFrames[currFrame] = objDetector.DetectObjs(vidFrameData, yoloModel, configs["yolo_params"])
-        # newFrame = vidFrameData.copy()
-        # objDetector.Draw(newFrame, objsInFrames[currFrame])
-        # objDetectionClip.write(newFrame)
+        if objDetector != None:
+            objsInFrames[currFrame] = objDetector.DetectObjs(vidFrameData, yoloModel, configs["yolo_params"])
+            newFrame = vidFrameData.copy()
+            objDetector.Draw(newFrame, objsInFrames[currFrame])
+            objDetectionClip.write(newFrame)
 
         # check collision between objs and human
-        # objCollisions[currFrame] = objCollisionChecker.CheckCollision(objsInFrames[currFrame])
-        # newFrame = vidFrameData.copy()
-        # objCollisionChecker.Draw(newFrame, objCollisions[currFrame])
-        # collisionClip.write(newFrame)      
+        if objCollisionChecker != None:
+            objCollisions[currFrame] = objCollisionChecker.CheckCollision(objsInFrames[currFrame])
+            newFrame = vidFrameData.copy()
+            objCollisionChecker.Draw(newFrame, objCollisions[currFrame])
+            collisionClip.write(newFrame)
 
         #get proper positions of the objects against the humans
-
         currFrame += 1
         print(f"processed frame {currFrame}/{videoDrawer.videoTotalFrames}")
 
-    videoDrawer.StopVideo()
-    objDetectionClip.release()
-    collisionClip.release()
-    print("Pre-process stage done, videos stored")
+    if objDetector != None:
+        joblib.dump(objsInFrames, os.path.join(videoDrawer.outputPath, "detected.pkl"))
+        objDetectionClip.release()
 
+    if objCollisionChecker != None:
+        joblib.dump(objCollisions, os.path.join(videoDrawer.outputPath, "object_collisions.pkl"))
+        collisionClip.release()
+
+    videoDrawer.StopVideo()
+    
 
     # create SMPL parameters
+    print("Pre-process stage done, videos stored and checkpoint files created")
     print("Creating SMPL parameters from humans in video for every frame")
-    # humans = {}
-    # for frameNo, objInFrame in objsInFrames.items():
-    #     for obj in objInFrame:
-    #         if obj.className == 0:
-    #             if obj.id not in humans:
-    #                 humans[obj.id] = PreProcessPersonData([], None, [], obj.id)
-                
-    #             humans[obj.id].bboxes.append(obj.ConvertBboxToCenterWidthHeight())
-    #             # humans[obj.id].joints2D.append(obj.bbox)
-    #             humans[obj.id].frames.append(frameNo)
-    
-    # print(_videoPath)
-    # smplParamCreator = VidSMPLParamCreator(_videoPath, configs["vibe_params"])
-    # humanRenderData = smplParamCreator.processPeopleInVid(humans.values(), videoDrawer.outputPath)
+    humanRenderData = None
+    if args.smplPKL != '':
+        humans = {}
+        for frameNo, objInFrame in objsInFrames.items():
+            for obj in objInFrame:
+                if obj.className == 0:
+                    if obj.id not in humans:
+                        humans[obj.id] = PreProcessPersonData([], None, [], obj.id)
+                    
+                    humans[obj.id].bboxes.append(obj.ConvertBboxToCenterWidthHeight())
+                    # humans[obj.id].joints2D.append(obj.bbox)
+                    humans[obj.id].frames.append(frameNo)
+        
+        smplParamCreator = VidSMPLParamCreator(args.input, configs["vibe_params"])
+        humanRenderData = smplParamCreator.processPeopleInVid(humans.values(), videoDrawer.outputPath)
 
-    # del smplParamCreator
-    # del humans
-    print("PKL file created in output folder")
+        del smplParamCreator
+        del humans
+        print("PKL file created in output folder")
+    else:
+        with open(args.smplPKL, 'rb') as f:
+            humanRenderData = pickle.load(f)
 
     # read the parameters of each human
     # for the objects find the nearest point to attach to or render
@@ -95,7 +119,10 @@ def main(_videoPath):
     # render the objects and humans
     print("Render Objects and humans")
     objData = {key: [obj for obj in objs if obj.className != 0] for key, objs in objsInFrames.items()}
-    render(videoDrawer, None, objData)
+    print(videoDrawer)
+    print(objData)
+
+    render(videoDrawer, humanRenderData, objData)
     print("Render done")
 
 
@@ -118,8 +145,8 @@ def render(_videoInfo, _humanRenderData = None, _objRenderData = None):
     renderer = Renderer(resolution=(_videoInfo.videoWidth, _videoInfo.videoHeight), orig_img=True, wireframe=False, renderOnWhite=True)
 
     # dictionary, {frameNo: {humanId: verts, cam, joints3D, pose} }
-    # frame_results = prepare_rendering_results(_humanRenderData, _videoInfo.videoTotalFrames)
-    # mesh_color = {k: colorsys.hsv_to_rgb(np.random.rand(), 0.5, 1.0) for k in _humanRenderData.keys()}
+    frame_results = prepare_rendering_results(_humanRenderData, _videoInfo.videoTotalFrames)
+    mesh_color = {k: colorsys.hsv_to_rgb(np.random.rand(), 0.5, 1.0) for k in _humanRenderData.keys()}
 
     renderClip = _videoInfo.CreateNewClip("render")
 
@@ -127,41 +154,37 @@ def render(_videoInfo, _humanRenderData = None, _objRenderData = None):
         img = None
 
         # render people in video 
-        # for person_id, person_data in frame_results[frameIndex].items():
-        #     frame_verts = person_data['verts']
-        #     frame_cam = person_data['cam']
-        #     # [VIBE-Object Start]
-        #     frame_joints3d = person_data['joints3d']
-        #     frame_pose = person_data['pose']
-        #     # [VIBE-Object End]
+        for person_id, person_data in frame_results[frameIndex].items():
+            frame_verts = person_data['verts']
+            frame_cam = person_data['cam']
+            # [VIBE-Object Start]
+            frame_joints3d = person_data['joints3d']
+            frame_pose = person_data['pose']
+            # [VIBE-Object End]
 
-        #     mc = mesh_color[person_id]
-            
-        #     # Add camera to scene.
-        #     renderer.push_cam(frame_cam)
+            mc = mesh_color[person_id]
+            renderer.push_cam(frame_cam) # Add human camera to scene.
+            renderer.push_human(verts=frame_verts, color=mc) # Add human to scene.
 
-        #     # Add human to scene.
-        #     renderer.push_human(verts=frame_verts, color=mc)
-
-        #     img = renderer.pop_and_render(img)
+            img = renderer.pop_and_render(img) # append human into img
 
         # obj to render
         for obj in _objRenderData[frameIndex]:
             objCxCy = obj.ConvertBboxToCenterWidthHeight()
-            print("An Obj is being rendered")
-
-            renderer.push_cam([1,1, 0, 0])
+            
+            renderer.push_default_cam()
+            location = renderer.screenspace_to_worldspace(objCxCy[0], objCxCy[1])
 
             renderer.push_obj(
-                '3D_Models/sphere.obj',
-                translation= [0, 0, 0],
+                '3D_Models/monkey.obj',
+                translation= [location[0], location[1], location[2]],
                 angle=0,
-                axis=[0,0,0],
+                axis=[1,1,1],
                 scale=[1, 1, 1],
                 color=[1.0, 0.0, 0.0],
             )
 
-            img = renderer.pop_and_render(img)
+            img = renderer.pop_and_render(img) # append obj to img
 
         renderClip.write(img)
         print(f"processed render for frame {frameIndex}/{_videoInfo.videoTotalFrames}")
@@ -169,6 +192,26 @@ def render(_videoInfo, _humanRenderData = None, _objRenderData = None):
     renderClip.release()
 
         
+def render_obj(_videoInfo):
+    renderer = Renderer(resolution=(_videoInfo.videoWidth, _videoInfo.videoHeight), orig_img=True, wireframe=False, renderOnWhite=True)
+
+    renderer.push_default_cam()
+    location = renderer.screenspace_to_worldspace(0, 0)
+
+    print("World space location")
+    print(location)
+    renderer.push_obj(
+        '3D_Models/sphere.obj',
+        translation= [location[0], location[1], 1],
+        angle=0,
+        axis=[0,0,0],
+        scale=[0.2, 0.2, 0.2],
+        color=[1.0, 0.0, 0.0],
+    )
+
+    img = renderer.pop_and_render()
+    cv2.imshow('Image', img)
+    cv2.waitKey(0)
 
 
 
@@ -199,7 +242,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Your application's description")
     parser.add_argument("--input", default='Input/video11.mp4', type=str, help="File path for video")
     parser.add_argument("--config", default='Configs/config.yaml', type=str, help="File path for config file")
-    parser.add_argument("--pkl", default='Output/clip_1.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+    parser.add_argument("--smplPKL", default='Output/clip_1.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+    parser.add_argument("--detectionPKL", default='Output/detected.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+    parser.add_argument("--collisionDetectionPKL", default='Output/object_collisions.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
 
 
     arguments = parser.parse_args()
@@ -210,4 +255,8 @@ if __name__ == "__main__":
     availableObjs = configs.get("interactable_objs", {})
     
     # loadYolo(configs["yolo_params"])
-    main(arguments.input)
+    # main(arguments)
+    videoDrawer = VideoDrawer("Input/video11.mp4", configs["output_folder_dir_path"])
+    render_obj(videoDrawer)
+    
+
