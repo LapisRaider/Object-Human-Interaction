@@ -28,3 +28,6 @@ class VideoDrawer:
 
     def StopVideo(self):
         self.video.release()
+    
+    def ResetVideo(self):
+        self.video.set(cv2.CAP_PROP_POS_FRAMES, 0)

@@ -30,11 +30,10 @@ configs = None
 def main(args):
     videoDrawer = VideoDrawer(args.input, configs["output_folder_dir_path"])
 
-    objsInFrames = {}
+    # Load things needed for object detection
+    objsInFrames = None
     objDetector = None
     objDetectionClip = None
-    collisionClip = None
-
     if args.detectionPKL == '':
         yoloModel = YOLO(configs["yolo_params"]["checkpoint_file"])
         objDetectionClip = videoDrawer.CreateNewClip("objDetection")
@@ -43,8 +42,10 @@ def main(args):
         with open(args.detectionPKL, 'rb') as f:
             objsInFrames = pickle.load(f)
 
+    # Load things needed to check for object collision
     objCollisions = {}
     objCollisionChecker = None
+    collisionClip = None
     if args.collisionDetectionPKL == '':
         collisionClip = videoDrawer.CreateNewClip("collision")
         objCollisionChecker = VideoEntityCollisionDetector([32])
@@ -52,6 +53,7 @@ def main(args):
         with open(args.collisionDetectionPKL, 'rb') as f:
             objCollisions = pickle.load(f)
 
+    # start detecting objects and checking for collisions in every frame
     print("Pre-process: Detect objects and possible collision between objects and humans")
     currFrame = 0
     while True:
@@ -73,7 +75,6 @@ def main(args):
             objCollisionChecker.Draw(newFrame, objCollisions[currFrame])
             collisionClip.write(newFrame)
 
-        #get proper positions of the objects against the humans
         currFrame += 1
         print(f"processed frame {currFrame}/{videoDrawer.videoTotalFrames}")
 
@@ -84,8 +85,6 @@ def main(args):
     if objCollisionChecker != None:
         joblib.dump(objCollisions, os.path.join(videoDrawer.outputPath, "object_collisions.pkl"))
         collisionClip.release()
-
-    videoDrawer.StopVideo()
     
 
     # create SMPL parameters
@@ -114,16 +113,18 @@ def main(args):
         with open(args.smplPKL, 'rb') as f:
             humanRenderData = pickle.load(f)
 
-    # read the parameters of each human
+    # TODO: read the parameters of each human
     # for the objects find the nearest point to attach to or render
+
 
     # render the objects and humans
     print("Render Objects and humans")
     objData = {key: [obj for obj in objs if obj.className != 0] for key, objs in objsInFrames.items()}
-    print(videoDrawer)
-    print(objData)
+    # print(videoDrawer)
+    # print(objData)
 
     render(videoDrawer, humanRenderData, objData)
+    videoDrawer.StopVideo()
     print("Render done")
 
 
@@ -151,10 +152,14 @@ def render(_videoInfo, _humanRenderData = None, _objRenderData = None):
 
     renderClip = _videoInfo.CreateNewClip("render")
 
-    for frameIndex in range(0, _videoInfo.videoTotalFrames):
-        img = None
+    _videoInfo.ResetVideo()
+    frameIndex = 0
+    while True:
+        hasFrames, img = _videoInfo.video.read() # gives in BGR format
+        if not hasFrames:
+            break
 
-        # render people in video 
+        # # render people in video 
         for person_id, person_data in frame_results[frameIndex].items():
             frame_verts = person_data['verts']
             frame_cam = person_data['cam']
@@ -176,7 +181,7 @@ def render(_videoInfo, _humanRenderData = None, _objRenderData = None):
             renderer.push_default_cam()
             print(objCxCy)
             location = renderer.screenspace_to_worldspace(objCxCy[0], objCxCy[1])
-
+            print(location)
             renderer.push_obj(
                 '3D_Models/sphere.obj',
                 translation= [location[0], location[1], 1],
@@ -187,7 +192,8 @@ def render(_videoInfo, _humanRenderData = None, _objRenderData = None):
             )
 
             img = renderer.pop_and_render(img) # append obj to img
-
+        
+        frameIndex += 1
         renderClip.write(img)
         print(f"processed render for frame {frameIndex}/{_videoInfo.videoTotalFrames}")
 
@@ -198,7 +204,7 @@ def render_obj(_videoInfo):
     renderer = Renderer(resolution=(_videoInfo.videoWidth, _videoInfo.videoHeight), orig_img=True, wireframe=False, renderOnWhite=True)
 
     renderer.push_default_cam()
-    location = renderer.screenspace_to_worldspace(0, 0)
+    location = renderer.screenspace_to_worldspace(1280, 720)
 
     print("World space location")
     print(location)
@@ -240,13 +246,31 @@ def loadYolo(_yoloParams):
 def drawBoundary():
     print("DRAW")
 
+from detectedObj import DetectedObj
+def pickleTest(isReading):
+    if isReading:
+        with open("Output/object_collisions.pkl", 'rb') as f:
+            humanRenderData = pickle.load(f)
+            print(humanRenderData)
+            print(humanRenderData[6].bbox)
+        return
+    
+    objs = {}
+    objs[3] = DetectedObj(10, [10,10,10,10], [10,10,10,10], 10.5, 5)
+    objs[4] = DetectedObj(10, [10,10,10,10], [10,10,10,10], 10.5, 5)
+    objs[6] = DetectedObj(10, [10,10,10,10], [10,10,10,10], 10.5, 5)
+    objs[7] = DetectedObj(10, [10,10,10,10], [10,10,10,10], 10.5, 5)
+
+    joblib.dump(objs, os.path.join("Output", "object_collisions.pkl"))
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Your application's description")
     parser.add_argument("--input", default='Input/video11.mp4', type=str, help="File path for video")
     parser.add_argument("--config", default='Configs/config.yaml', type=str, help="File path for config file")
     parser.add_argument("--smplPKL", default='Output/video11/vibe_output.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
     parser.add_argument("--detectionPKL", default='Output/video11/detected.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
-    parser.add_argument("--collisionDetectionPKL", default='Output/video11/object_collisions.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+    parser.add_argument("--collisionDetectionPKL", default='Output/video11/obj_collisions.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
 
 
     arguments = parser.parse_args()
@@ -257,6 +281,7 @@ if __name__ == "__main__":
     availableObjs = configs.get("interactable_objs", {})
     
     # loadYolo(configs["yolo_params"])
+    #pickleTest(True)
     main(arguments)
     # videoDrawer = VideoDrawer("Input/video11.mp4", configs["output_folder_dir_path"])
     # render_obj(videoDrawer)
