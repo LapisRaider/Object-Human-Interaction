@@ -13,7 +13,7 @@ import pickle
 import joblib
 from detectedObj import HumanInteractableObject
 
-from utils import CreateVideo, DrawSkeleton, DistBetweenPoints, FindIndexOfValueFromSortedArray
+from utils import CreateVideo, DrawSkeleton, DistBetweenPoints, DrawLineBetweenPoints, FindIndexOfValueFromSortedArray
 
 import sys
 sys.path.insert(0, 'Rendering')
@@ -129,37 +129,57 @@ def main(args):
 
     # for the objects find the nearest point to attach to or render
     print("Computing whether object is to be attached to a person or not")
-    ATTACHABLE_KEYPOINTS = configs["obj_keypoint_attachment_params"]["attachable_keypoints"]
+    ATTACHABLE_KEYPOINTS = set(configs["obj_keypoint_attachment_params"]["attachable_keypoints"])
     MAX_DIST_FROM_KEYPOINT = configs["obj_keypoint_attachment_params"]["max_distance"]
     objFrameAppearances = {} # {obj id: [frame number it appears in]}
     objsData = {} # {frameId: [objs that appear]}
-    for frameNo, objCollision in objCollisions.items():
-        objsData[frameNo] = []
 
-        for obj, objsCollidedWith in objCollision.items():
+    objAttachmentClip = videoDrawer.CreateNewClip("attachment")
+    videoDrawer.ResetVideo()
+    currFrame = 0
+    while True:
+        hasFrames, vidFrameData = videoDrawer.video.read() # gives in BGR format
+        if not hasFrames:
+            break
+
+        newFrame = vidFrameData.copy()
+        objsData[currFrame] = []
+        for obj, objsCollidedWith in objCollisions[currFrame].items():
             shortestDist = float('inf')
             
             # check nearest distance
             for otherObj in objsCollidedWith:
                 interactableObj = HumanInteractableObject.from_parent(obj)
-                objsData[frameNo].append(interactableObj)
+                objsData[currFrame].append(interactableObj)
                 if obj.id not in objFrameAppearances:
                     objFrameAppearances[obj.id] = []
 
-                objFrameAppearances[obj.id].append(frameNo)
-
+                objFrameAppearances[obj.id].append(currFrame)
+    
                 # compare with humans keypoints to see whether to attach
+                frameIndex = FindIndexOfValueFromSortedArray(humanRenderData[otherObj.id]["frame_ids"], currFrame) # the fact that the obj had AABB collision with the human means the human exists in this frame
                 for keypt in ATTACHABLE_KEYPOINTS:
-                    frameIndex = FindIndexOfValueFromSortedArray(humanRenderData[otherObj.id]["frame_ids"], frameNo)
                     keyPtPos = humanRenderData[otherObj.id]["joints2d_img_coord"][frameIndex][keypt]
                     c_x, c_y, w, h = obj.ConvertBboxToCenterWidthHeight()
                     currDist = DistBetweenPoints((c_x, c_y), keyPtPos)
 
+                    isPotentialAttachment = False
+                    # TODO, HAVE TO CHECK SIZE OF BALL VIA BOUNDING BOX SIZE / 2 THEN + THRESHOLD FOR COMPARISON
                     if currDist < shortestDist and currDist <= MAX_DIST_FROM_KEYPOINT:
                         shortestDist = currDist
                         interactableObj.Attach((keyPtPos[0] - c_x, keyPtPos[1] - c_y), otherObj.id, keypt)
-        print(f"processing frame {frameNo} / {videoDrawer.videoTotalFrames}")
+                        isPotentialAttachment = True
 
+                    lineColor = (0, 255, 0) if isPotentialAttachment else (0, 0, 255)
+                    DrawLineBetweenPoints(newFrame, (int(c_x), int(c_y)), (int(keyPtPos[0]), int(keyPtPos[1])), f'{currDist}', lineColor, 1)
+                
+                DrawSkeleton(newFrame, humanRenderData[otherObj.id]["joints2d_img_coord"][frameIndex], ATTACHABLE_KEYPOINTS)
+                
+        objAttachmentClip.write(newFrame)
+        currFrame += 1
+        print(f"processing frame {currFrame} / {videoDrawer.videoTotalFrames}")
+
+    objAttachmentClip.release()
     del objCollisions
     print("Computation for object's attachment is completed")
 
@@ -175,7 +195,7 @@ def main(args):
     # print(videoDrawer)
     # print(objData)
 
-    render(videoDrawer, humanRenderData, objsData)
+    #render(videoDrawer, humanRenderData, objsData)
     videoDrawer.StopVideo()
     print("Render done")
 
