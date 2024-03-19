@@ -32,3 +32,37 @@ class DetectedObj:
 
         # Return as numpy array in shape (4,)
         return [c_x, c_y, w, h]
+
+'''
+    Objects that a human can interact with
+'''
+class HumanInteractableObject(DetectedObj):
+    
+    def __init__(self, _id, _bbox, _oriBBox, _conf, _className):
+        super().__init__(_id, _bbox, _oriBBox, _conf, _className)
+
+        self.isAttached = False
+        self.attachedToObjId = -1 # id of object it is attached to
+        self.boneAttached = -1 # which bone is it attached to
+
+        c_x, c_y, w, h = self.ConvertBboxToCenterWidthHeight()
+        self.renderPoint = [c_x, c_y]
+        self.offset = (0 , 0) # offset away from interactable point
+
+    @classmethod
+    def from_parent(cls, parent_obj):
+        _id = parent_obj.id
+        _bbox = parent_obj.bbox
+        _oriBBox = parent_obj.originalBbox
+        _conf = parent_obj.conf
+        _className = parent_obj.className
+
+        interactable_obj = cls(_id, _bbox, _oriBBox, _conf, _className)
+
+        return interactable_obj
+    
+    def Attach(self, _otherObjId, _boneId, _offset):
+        self.offset = _offset
+        self.attachedToObjId = _otherObjId
+        self.boneAttached = _boneId
+        self.isAttached = True

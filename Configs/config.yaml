@@ -50,3 +50,9 @@ vibe_params:
     smooth_results: True
     smooth_min_cutoff: 0.004
     smooth_beta: 1.5
+
+# parameters related to attaching obj to an existing keypoint
+obj_keypoint_attachment_params:
+    max_distance: 10 # pixel distance
+
+    attachable_keypoints: [4, 7] # keypoints the object can attach to. Based on Renderin/lib/data_utils get_spin_joint_names()

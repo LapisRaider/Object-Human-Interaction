@@ -11,8 +11,9 @@ import colorsys
 import numpy as np
 import pickle
 import joblib
+from detectedObj import HumanInteractableObject
 
-from utils import CreateVideo
+from utils import CreateVideo, DrawSkeleton, DistBetweenPoints, FindIndexOfValueFromSortedArray
 
 import sys
 sys.path.insert(0, 'Rendering')
@@ -31,7 +32,7 @@ def main(args):
     videoDrawer = VideoDrawer(args.input, configs["output_folder_dir_path"])
 
     # Load things needed for object detection
-    objsInFrames = None
+    objsInFrames = {}
     objDetector = None
     objDetectionClip = None
     if args.detectionPKL == '':
@@ -58,7 +59,7 @@ def main(args):
     # start detecting objects and checking for collisions in every frame
     print("Pre-process: Detect objects and possible collision between objects and humans")
     currFrame = 0
-    if objDetector == None and objCollisionChecker == None:
+    if objDetector != None and objCollisionChecker != None:
         while True:
             hasFrames, vidFrameData = videoDrawer.video.read() # gives in BGR format
             if not hasFrames:
@@ -84,10 +85,12 @@ def main(args):
     if objDetector != None:
         joblib.dump(objsInFrames, os.path.join(videoDrawer.outputPath, "detected.pkl"))
         objDetectionClip.release()
+        del objDetector
 
     if objCollisionChecker != None:
         joblib.dump(objCollisions, os.path.join(videoDrawer.outputPath, "object_collisions.pkl"))
         collisionClip.release()
+        del objCollisionChecker
     
 
     # create SMPL parameters
@@ -96,6 +99,8 @@ def main(args):
     if args.smplPKL == '':
         print("Creating SMPL parameters from humans in video for every frame")
         humans = {}
+
+        # extract out info to feed into VIBE
         for frameNo, objInFrame in objsInFrames.items():
             for obj in objInFrame:
                 if obj.className == 0:
@@ -106,31 +111,84 @@ def main(args):
                     # humans[obj.id].joints2D.append(obj.bbox)
                     humans[obj.id].frames.append(frameNo)
         
+        # Run VIBE
         smplParamCreator = VidSMPLParamCreator(args.input, configs["vibe_params"])
         humanRenderData = smplParamCreator.processPeopleInVid(humans.values(), videoDrawer.outputPath)
 
         del smplParamCreator
         del humans
+        del objsInFrames
         print("PKL file created in output folder")
     else:
         print("Read data from existing PKL file")
         with open(args.smplPKL, 'rb') as f:
             humanRenderData = joblib.load(f)
+        
+        del objsInFrames
 
-    # TODO: read the parameters of each human
+
     # for the objects find the nearest point to attach to or render
+    print("Computing whether object is to be attached to a person or not")
+    ATTACHABLE_KEYPOINTS = configs["obj_keypoint_attachment_params"]["attachable_keypoints"]
+    MAX_DIST_FROM_KEYPOINT = configs["obj_keypoint_attachment_params"]["max_distance"]
+    objFrameAppearances = {} # {obj id: [frame number it appears in]}
+    objsData = {} # {frameId: [objs that appear]}
+    for frameNo, objCollision in objCollisions.items():
+        objsData[frameNo] = []
+
+        for obj, objsCollidedWith in objCollision.items():
+            shortestDist = float('inf')
+            
+            # check nearest distance
+            for otherObj in objsCollidedWith:
+                interactableObj = HumanInteractableObject.from_parent(obj)
+                objsData[frameNo].append(interactableObj)
+                if obj.id not in objFrameAppearances:
+                    objFrameAppearances[obj.id] = []
+
+                objFrameAppearances[obj.id].append(frameNo)
+
+                # compare with humans keypoints to see whether to attach
+                for keypt in ATTACHABLE_KEYPOINTS:
+                    frameIndex = FindIndexOfValueFromSortedArray(humanRenderData[otherObj.id]["frame_ids"], frameNo)
+                    keyPtPos = humanRenderData[otherObj.id]["joints2d_img_coord"][frameIndex][keypt]
+                    c_x, c_y, w, h = obj.ConvertBboxToCenterWidthHeight()
+                    currDist = DistBetweenPoints((c_x, c_y), keyPtPos)
+
+                    if currDist < shortestDist and currDist <= MAX_DIST_FROM_KEYPOINT:
+                        shortestDist = currDist
+                        interactableObj.Attach((keyPtPos[0] - c_x, keyPtPos[1] - c_y), otherObj.id, keypt)
+        print(f"processing frame {frameNo} / {videoDrawer.videoTotalFrames}")
+
+    del objCollisions
+    print("Computation for object's attachment is completed")
+
+
+    # TODO: If object has missing frames, clean up data
+    # check missing frames objFrameAppearances
+
 
 
     # render the objects and humans
     print("Render Objects and humans")
-    objData = {key: [obj for obj in objs if obj.className != 0] for key, objs in objsInFrames.items()}
+    # objData = {key: [obj for obj in objs if obj.className != 0] for key, objs in objsInFrames.items()}
     # print(videoDrawer)
     # print(objData)
 
-    render(videoDrawer, humanRenderData, objData)
+    render(videoDrawer, humanRenderData, objsData)
     videoDrawer.StopVideo()
     print("Render done")
 
+
+def TEST_PKL(args):
+    with open(args.smplPKL, 'rb') as f:
+        humanRenderData = joblib.load(f)
+
+    whiteBackground = np.full((1500, 2000, 3), 255, dtype=np.uint8)
+    DrawSkeleton(whiteBackground, humanRenderData[1]["joints2d_img_coord"][0])
+
+    cv2.imshow('Image', whiteBackground)
+    cv2.waitKey(0)
 
 '''
     arguments:
@@ -142,8 +200,7 @@ def main(args):
         }...] Array of people objects
 
         _objRenderData: [
-        
-
+            HumanInteractableObject
         ]
 '''
 def render(_videoInfo, _humanRenderData = None, _objRenderData = None):
@@ -176,14 +233,29 @@ def render(_videoInfo, _humanRenderData = None, _objRenderData = None):
             renderer.push_cam(frame_cam) # Add human camera to scene.
             renderer.push_human(verts=frame_verts, color=mc) # Add human to scene.
 
+            for obj in _objRenderData[frameIndex]:
+                if not obj.isAttached:
+                    continue
+
+                # axis_angle = get_left_hand_rotation(frame_pose).to_axis_angle()
+                # axis = axis_angle[0]
+                # angle = axis_angle[1] * (180.0/math.pi)
+                # renderer.push_obj(
+                #     '3D_Models/sphere.obj',
+                #     translation=get_left_wrist_translation(frame_joints3d), 
+                #     angle=angle,
+                #     axis=[axis.x, axis.y, axis.z],
+                #     scale=[0.2, 0.2, 0.2],
+                #     color=[1.0, 0.0, 0.0],
+                # )
+
+
             img = renderer.pop_and_render(img) # append human into img
 
         # obj to render
         for obj in _objRenderData[frameIndex]:
-            objCxCy = obj.ConvertBboxToCenterWidthHeight()
-            
             renderer.push_default_cam()
-            location = renderer.screenspace_to_worldspace(objCxCy[0], objCxCy[1])
+            location = renderer.screenspace_to_worldspace(obj.renderPoint[0], obj.renderPoint[1])
             renderer.push_obj(
                 '3D_Models/sphere.obj',
                 translation= [location[0], location[1], 1],
@@ -194,7 +266,7 @@ def render(_videoInfo, _humanRenderData = None, _objRenderData = None):
             )
 
             img = renderer.pop_and_render(img) # append obj to img
-        
+    
         frameIndex += 1
         renderClip.write(img)
         print(f"processed render for frame {frameIndex}/{_videoInfo.videoTotalFrames}")
@@ -240,6 +312,7 @@ if __name__ == "__main__":
     availableObjs = configs.get("interactable_objs", {})
     
     main(arguments)
+    #TEST_PKL(arguments)
     # videoDrawer = VideoDrawer("Input/video11.mp4", configs["output_folder_dir_path"])
     # TEST_render_obj(videoDrawer)
     
