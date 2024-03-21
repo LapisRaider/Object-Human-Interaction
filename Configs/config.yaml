@@ -56,3 +56,6 @@ obj_keypoint_attachment_params:
     max_distance: 70 # pixel distance
 
     attachable_keypoints: [4, 7] # keypoints the object can attach to. Based on Renderin/lib/data_utils get_spin_joint_names()
+
+obj_smoothing:
+    max_missing_frames: 10 # maximum number of frame an obj can go missing before it is deemed out of frame

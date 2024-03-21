@@ -186,6 +186,38 @@ def main(args):
 
     # TODO: If object has missing frames, clean up data
     # check missing frames objFrameAppearances
+    # MAX_MISSING_FRAMES = configs["obj_smoothing"]["max_missing_frames"]
+    # for objId, frameAppearances in objFrameAppearances.items():
+
+    #     for i in range(1, len(frameAppearances)):
+    #         frameDiff = frameAppearances[i] - frameAppearances[i - 1]
+
+    #         # no missing frames
+    #         if frameDiff == 0:
+    #             continue
+
+    #         # went over threshold, most likely left the frame
+    #         if frameDiff > MAX_MISSING_FRAMES:
+    #             continue
+
+    #         lastFrame = frameAppearances[i - 1]
+
+    '''
+        Various different states:
+            both no grab: interpolate positions via kinematic equation
+            both grab + same person id: frames in between we will assume that it is still attached to same person
+            both grab + diff person id: idk fuckin pray??
+                the ball left first person temporarily and second person grab
+                first person passed to second person
+
+            1 grab, the other does not: have to interpolate between frames and based on dist, predict when its still attached and when its not
+
+        Based on the states, add the missing data
+
+    '''
+    
+    #for r in range (frameDiff):
+
 
 
 
@@ -195,7 +227,7 @@ def main(args):
     # print(videoDrawer)
     # print(objData)
 
-    #render(videoDrawer, humanRenderData, objsData)
+    render(videoDrawer, humanRenderData, objsData)
     videoDrawer.StopVideo()
     print("Render done")
 
@@ -281,7 +313,7 @@ def render(_videoInfo, _humanRenderData = None, _objRenderData = None):
                 translation= [location[0], location[1], 1],
                 angle=0,
                 axis=[0,0,0],
-                scale=[0.2, 0.2, 0.2],
+                scale=[0.08, 0.08, 0.08],
                 color=[1.0, 0.0, 0.0],
             )
 
@@ -317,11 +349,11 @@ def TEST_render_obj(IMAGE_FRAME, X, Y):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Your application's description")
-    parser.add_argument("--input", default='Input/video11.mp4', type=str, help="File path for video")
+    parser.add_argument("--input", default='Input/PassBallTwoHands.mp4', type=str, help="File path for video")
     parser.add_argument("--config", default='Configs/config.yaml', type=str, help="File path for config file")
-    parser.add_argument("--smplPKL", default='Output/video11/vibe_output.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
-    parser.add_argument("--detectionPKL", default='Output/video11/detected.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
-    parser.add_argument("--collisionDetectionPKL", default='Output/video11/object_collisions.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+    parser.add_argument("--smplPKL", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+    parser.add_argument("--detectionPKL", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+    parser.add_argument("--collisionDetectionPKL", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
 
 
     arguments = parser.parse_args()
