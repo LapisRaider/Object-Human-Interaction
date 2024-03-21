@@ -59,3 +59,10 @@ obj_keypoint_attachment_params:
 
 obj_smoothing:
     max_missing_frames: 10 # maximum number of frame an obj can go missing before it is deemed out of frame
+
+render_output:
+    # Whether the models would be in wireframe mode
+    isWireframe: True
+
+    # Overlay the animation and models over the original video
+    renderOnOriVid: True
