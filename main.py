@@ -23,6 +23,12 @@ from lib.utils.demo_utils import (
     prepare_rendering_results,
 )
 
+# [VIBE-Object Start]
+import math
+import lib.vibe_obj.utils as vibe_obj
+import resize
+# [VIBE-Object End]
+
 yoloModel = None
 availableObjs = None
 yoloClassNameIndexMap = None
@@ -264,15 +270,22 @@ def render(_videoInfo, _humanRenderData = None, _objRenderData = None):
     mesh_color = {k: colorsys.hsv_to_rgb(np.random.rand(), 0.5, 1.0) for k in _humanRenderData.keys()}
 
     renderClip = _videoInfo.CreateNewClip("render")
-
     _videoInfo.ResetVideo()
+
+    fov = math.radians(60)
+    pos_x = 0.0
+    pos_y = 0.0
+    pos_z = 0.0
+    aspect_ratio = _videoInfo.videoWidth/_videoInfo.videoHeight
     frameIndex = 0
     while True:
         hasFrames, img = _videoInfo.video.read() # gives in BGR format
         if not hasFrames:
             break
 
-        # # render people in video 
+        renderer.push_persp_cam(fov)
+
+        # # render people in video
         for person_id, person_data in frame_results[frameIndex].items():
             frame_verts = person_data['verts']
             frame_cam = person_data['cam']
@@ -281,51 +294,48 @@ def render(_videoInfo, _humanRenderData = None, _objRenderData = None):
             frame_pose = person_data['pose']
             # [VIBE-Object End]
 
+            tan_half_fov = math.tan(fov * 0.5)
+            sx, sy, tx, ty = frame_cam
+            pos_z = -1.0 / (sy * tan_half_fov)
+            pos_y = -ty
+            pos_x = tx
+            
             mc = mesh_color[person_id]
-            renderer.push_cam(frame_cam) # Add human camera to scene.
-            renderer.push_human(verts=frame_verts, color=mc) # Add human to scene.
+            renderer.push_human(verts=frame_verts, # Add human to scene.
+                                color=mc,
+                                translation=[pos_x, pos_y, pos_z])
 
-            for obj in _objRenderData[frameIndex]:
-                if not obj.isAttached:
-                    continue
-
-                # axis_angle = get_left_hand_rotation(frame_pose).to_axis_angle()
-                # axis = axis_angle[0]
-                # angle = axis_angle[1] * (180.0/math.pi)
-                # renderer.push_obj(
-                #     '3D_Models/sphere.obj',
-                #     translation=get_left_wrist_translation(frame_joints3d), 
-                #     angle=angle,
-                #     axis=[axis.x, axis.y, axis.z],
-                #     scale=[0.2, 0.2, 0.2],
-                #     color=[1.0, 0.0, 0.0],
-                # )
-
-
-            img = renderer.pop_and_render(img) # append human into img
-
-        # obj to render
         for obj in _objRenderData[frameIndex]:
-            renderer.push_default_cam()
-            location = renderer.screenspace_to_worldspace(obj.renderPoint[0], obj.renderPoint[1])
+            objCxCy = obj.ConvertBboxToCenterWidthHeight()
+            obj_scale = resize.get_world_height(objCxCy[3], _videoInfo.videoHeight, fov, pos_z)
+            
+            # Map the screen coordinate to NDC, which is [-1, 1].
+            screen_x = -(objCxCy[0] / _videoInfo.videoWidth * 2.0 - 1.0)
+            screen_y = objCxCy[1] / _videoInfo.videoHeight * 2.0 - 1.0
+
+            # Convert from NDC to world coordinate.
+            obj_x = screen_x * pos_z * math.tan(0.5 * fov) * aspect_ratio
+            obj_y = screen_y * pos_z * math.tan(0.5 * fov)
+            obj_z = pos_z
+
             renderer.push_obj(
                 '3D_Models/sphere.obj',
-                translation= [location[0], location[1], 1],
+                translation=[obj_x, obj_y, obj_z],
                 angle=0,
                 axis=[0,0,0],
-                scale=[0.08, 0.08, 0.08],
-                color=[1.0, 0.0, 0.0],
+                scale=[obj_scale, obj_scale, obj_scale],
+                color=[0.05, 1.0, 1.0],
             )
 
-            img = renderer.pop_and_render(img) # append obj to img
-    
+        img = renderer.pop_and_render(img) # append human into img
         frameIndex += 1
         renderClip.write(img)
         print(f"processed render for frame {frameIndex}/{_videoInfo.videoTotalFrames}")
 
     renderClip.release()
 
-        
+
+'''     
 def TEST_render_obj(IMAGE_FRAME, X, Y):
     renderer = Renderer(resolution=(IMAGE_FRAME.videoWidth, IMAGE_FRAME.videoHeight), orig_img=True, wireframe=False, renderOnWhite=True)
 
@@ -346,15 +356,25 @@ def TEST_render_obj(IMAGE_FRAME, X, Y):
     img = renderer.pop_and_render()
     cv2.imshow('Image', img)
     cv2.waitKey(0)
+'''
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Your application's description")
-    parser.add_argument("--input", default='Input/PassBallTwoHands.mp4', type=str, help="File path for video")
-    parser.add_argument("--config", default='Configs/config.yaml', type=str, help="File path for config file")
-    parser.add_argument("--smplPKL", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
-    parser.add_argument("--detectionPKL", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
-    parser.add_argument("--collisionDetectionPKL", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+    refresh = False
+    video_name = "PassBallTwoHands"
 
+    parser = argparse.ArgumentParser(description="Your application's description")
+    if refresh == True:
+        parser.add_argument("--input", default='Input/'+ video_name + '.mp4', type=str, help="File path for video")
+        parser.add_argument("--config", default='Configs/config.yaml', type=str, help="File path for config file")
+        parser.add_argument("--smplPKL", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+        parser.add_argument("--detectionPKL", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+        parser.add_argument("--collisionDetectionPKL", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+    else:
+        parser.add_argument("--input", default='Input/'+ video_name + '.mp4', type=str, help="File path for video")
+        parser.add_argument("--config", default='Configs/config.yaml', type=str, help="File path for config file")
+        parser.add_argument("--smplPKL", default='Output/' + video_name + '/vibe_output.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+        parser.add_argument("--detectionPKL", default='Output/' + video_name + '/detected.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+        parser.add_argument("--collisionDetectionPKL", default='Output/' + video_name + '/object_collisions.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
 
     arguments = parser.parse_args()
     
@@ -366,6 +386,4 @@ if __name__ == "__main__":
     main(arguments)
     #TEST_PKL(arguments)
     # videoDrawer = VideoDrawer("Input/video11.mp4", configs["output_folder_dir_path"])
-    # TEST_render_obj(videoDrawer)
-    
-
+    # TEST_render_obj(videoDrawer, 0, 0)
