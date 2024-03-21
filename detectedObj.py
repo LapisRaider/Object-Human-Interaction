@@ -47,6 +47,8 @@ class HumanInteractableObject(DetectedObj):
 
         c_x, c_y, w, h = self.ConvertBboxToCenterWidthHeight()
         self.renderPoint = [c_x, c_y]
+        self.width = w
+        self.heigh = h
         self.offset = (0 , 0) # offset away from interactable point
 
     @classmethod

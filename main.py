@@ -229,24 +229,10 @@ def main(args):
 
     # render the objects and humans
     print("Render Objects and humans")
-    # objData = {key: [obj for obj in objs if obj.className != 0] for key, objs in objsInFrames.items()}
-    # print(videoDrawer)
-    # print(objData)
-
     render(videoDrawer, humanRenderData, objsData)
     videoDrawer.StopVideo()
     print("Render done")
 
-
-def TEST_PKL(args):
-    with open(args.smplPKL, 'rb') as f:
-        humanRenderData = joblib.load(f)
-
-    whiteBackground = np.full((1500, 2000, 3), 255, dtype=np.uint8)
-    DrawSkeleton(whiteBackground, humanRenderData[1]["joints2d_img_coord"][0])
-
-    cv2.imshow('Image', whiteBackground)
-    cv2.waitKey(0)
 
 '''
     arguments:
@@ -276,7 +262,6 @@ def render(_videoInfo, _humanRenderData = None, _objRenderData = None):
     pos_x = 0.0
     pos_y = 0.0
     pos_z = 0.0
-    aspect_ratio = _videoInfo.videoWidth/_videoInfo.videoHeight
     frameIndex = 0
     while True:
         hasFrames, img = _videoInfo.video.read() # gives in BGR format
@@ -305,18 +290,10 @@ def render(_videoInfo, _humanRenderData = None, _objRenderData = None):
                                 color=mc,
                                 translation=[pos_x, pos_y, pos_z])
 
+        # render objs in video
         for obj in _objRenderData[frameIndex]:
-            objCxCy = obj.ConvertBboxToCenterWidthHeight()
-            obj_scale = resize.get_world_height(objCxCy[3], _videoInfo.videoHeight, fov, pos_z)
-            
-            # Map the screen coordinate to NDC, which is [-1, 1].
-            screen_x = -(objCxCy[0] / _videoInfo.videoWidth * 2.0 - 1.0)
-            screen_y = objCxCy[1] / _videoInfo.videoHeight * 2.0 - 1.0
-
-            # Convert from NDC to world coordinate.
-            obj_x = screen_x * pos_z * math.tan(0.5 * fov) * aspect_ratio
-            obj_y = screen_y * pos_z * math.tan(0.5 * fov)
-            obj_z = pos_z
+            obj_scale = resize.get_world_height(obj.width, _videoInfo.videoHeight, fov, pos_z)
+            obj_x, obj_y, obj_z = renderer.screenspace_to_worldspace(obj.renderPoint[0], obj.renderPoint[1], pos_z)
 
             renderer.push_obj(
                 '3D_Models/sphere.obj',
