@@ -1,4 +1,4 @@
-import numpy as np
+from utils import ConvertBboxToCenterWidthHeight
 
 class DetectedObj:
     def __init__(self, _id, _bbox, _oriBBox, _conf, _className):
@@ -15,23 +15,6 @@ class DetectedObj:
         y_intersect = (minY < otherMaxY) and (otherMinY < maxY)
 
         return x_intersect and y_intersect
-    
-    def ConvertBboxToCenterWidthHeight(self):
-        # Extract coordinates from bbox
-        minX, minY, maxX, maxY = self.bbox
-
-        # Calculate height h
-        h = maxY - minY
-        w = maxX - minX
-
-        # Calculate center coordinates (c_x, c_y)
-        c_x = minX + w/2
-        c_y = minY + h/2
-
-        w = h = np.where(w / h > 1, w, h)
-
-        # Return as numpy array in shape (4,)
-        return [c_x, c_y, w, h]
 
 '''
     Objects that a human can interact with
@@ -45,7 +28,7 @@ class HumanInteractableObject(DetectedObj):
         self.attachedToObjId = -1 # id of object it is attached to
         self.boneAttached = -1 # which bone is it attached to
 
-        c_x, c_y, w, h = self.ConvertBboxToCenterWidthHeight()
+        c_x, c_y, w, h = ConvertBboxToCenterWidthHeight(_oriBBox)
         self.renderPoint = [c_x, c_y]
         self.width = w
         self.heigh = h

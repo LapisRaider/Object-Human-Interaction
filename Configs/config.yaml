@@ -53,7 +53,7 @@ vibe_params:
 
 # parameters related to attaching obj to an existing keypoint
 obj_keypoint_attachment_params:
-    max_distance: 70 # pixel distance
+    max_distance: 90 # pixel distance
 
     attachable_keypoints: [4, 7] # keypoints the object can attach to. Based on Renderin/lib/data_utils get_spin_joint_names()
 

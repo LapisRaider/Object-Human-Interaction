@@ -13,7 +13,7 @@ import pickle
 import joblib
 from detectedObj import HumanInteractableObject, Coordinates
 
-from utils import DrawSkeleton, DistBetweenPoints, DrawLineBetweenPoints, FindIndexOfValueFromSortedArray
+from utils import DrawSkeleton, DistBetweenPoints, DrawLineBetweenPoints, FindIndexOfValueFromSortedArray, ConvertBboxToCenterWidthHeight, DrawTextOnTopRight
 
 import sys
 sys.path.insert(0, 'Rendering')
@@ -22,6 +22,7 @@ from lib.utils.renderer import Renderer
 from lib.utils.demo_utils import (
     prepare_rendering_results,
 )
+from lib.data_utils.kp_utils import map_spin_to_smpl
 from lib.vibe_obj.utils import get_rotation
 
 # [VIBE-Object Start]
@@ -77,6 +78,7 @@ def main(args):
                 objsInFrames[currFrame] = objDetector.DetectObjs(vidFrameData, yoloModel, configs["yolo_params"])
                 newFrame = vidFrameData.copy()
                 objDetector.Draw(newFrame, objsInFrames[currFrame])
+                DrawTextOnTopRight(newFrame, f"{currFrame}/{videoDrawer.videoTotalFrames}",  videoDrawer.videoWidth)
                 objDetectionClip.write(newFrame)
 
             # check collision between objs and human
@@ -84,6 +86,7 @@ def main(args):
                 objCollisions[currFrame] = objCollisionChecker.CheckCollision(objsInFrames[currFrame])
                 newFrame = vidFrameData.copy()
                 objCollisionChecker.Draw(newFrame, objCollisions[currFrame])
+                DrawTextOnTopRight(newFrame, f"{currFrame}/{videoDrawer.videoTotalFrames}",  videoDrawer.videoWidth)
                 collisionClip.write(newFrame)
 
             currFrame += 1
@@ -114,7 +117,7 @@ def main(args):
                     if obj.id not in humans:
                         humans[obj.id] = PreProcessPersonData([], None, [], obj.id)
                     
-                    humans[obj.id].bboxes.append(obj.ConvertBboxToCenterWidthHeight())
+                    humans[obj.id].bboxes.append(ConvertBboxToCenterWidthHeight(obj.originalBbox))
                     # humans[obj.id].joints2D.append(obj.bbox)
                     humans[obj.id].frames.append(frameNo)
         
@@ -187,7 +190,8 @@ def main(args):
                         DrawLineBetweenPoints(newFrame, (int(c_x), int(c_y)), (int(keyPtPos[0]), int(keyPtPos[1])), f'{currDist}', lineColor, 1)
                     
                     DrawSkeleton(newFrame, humanRenderData[otherObj.id]["joints2d_img_coord"][frameIndex], ATTACHABLE_KEYPOINTS)
-                    
+            
+            DrawTextOnTopRight(newFrame, f"{currFrame}/{videoDrawer.videoTotalFrames}",  videoDrawer.videoWidth)
             objAttachmentClip.write(newFrame)
             currFrame += 1
             print(f"processing frame {currFrame} / {videoDrawer.videoTotalFrames}")
@@ -310,10 +314,12 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
                                 translation=[pos_x, pos_y, pos_z])
 
         # render objs in video
+        objCounter = 0
         for obj in _objRenderData[frameIndex]:
             pos_z = 1.0 if obj.id not in objCoordinates else objCoordinates[obj.id].z
             obj_screenX = obj.renderPoint[0]
             obj_screenY = obj.renderPoint[1]
+            offset = [0, 0 , 0]
             axis = [0, 0, 0]
             angle = 0
 
@@ -322,11 +328,21 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
                 pos_z = peopleCoordinates[obj.attachedToObjId].z
 
                 smpl_pose = frame_results[frameIndex][obj.attachedToObjId]['pose']
-                axis_angle = get_rotation(smpl_pose, 22) # TODO: MAP SPIN TO SMPL
+                axis_angle = get_rotation(smpl_pose, map_spin_to_smpl()[obj.boneAttached]) 
                 axis = axis_angle[1:4]
                 angle = axis_angle[0] * (180.0/math.pi)
 
-                # screen x and y coordinates are the same, but the transformation order is different
+                # overall screen x and y coordinates are the same, but the transformation order is different
+                offset = [obj.offset[0], obj.offset[1], 0]
+                # TODO: now using 2d keypoint position instead of smpl 3d position, might want to change
+                humanFrameIndex = FindIndexOfValueFromSortedArray(_humanRenderData[obj.attachedToObjId]["frame_ids"], frameIndex)
+                joint2DCoords = _humanRenderData[obj.attachedToObjId]["joints2d_img_coord"][humanFrameIndex][obj.boneAttached]
+                jointWorldCoords = renderer.screenspace_to_worldspace(joint2DCoords[0], joint2DCoords[1], pos_z)
+                objWorldCoords = renderer.screenspace_to_worldspace(obj_screenX, obj_screenY, pos_z)
+                
+                offset = [objWorldCoords[0] - jointWorldCoords[0], objWorldCoords[1] - jointWorldCoords[1], 0]
+                obj_screenX, obj_screenY = joint2DCoords
+                
 
             obj_scale = resize.get_world_height(obj.width, _videoInfo.videoHeight, fov, pos_z)
             obj_x, obj_y, obj_z = renderer.screenspace_to_worldspace(obj_screenX, obj_screenY, pos_z)
@@ -335,17 +351,22 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
 
             renderer.push_obj(
                 '3D_Models/sphere.obj',
+                translation_offset=offset,
                 translation=[obj_x, obj_y, obj_z],
                 angle=angle,
                 axis=axis,
                 scale=[obj_scale, obj_scale, obj_scale],
                 color=[0.05, 1.0, 1.0],
             )
+
+            objCounter += 1
+            print(objCounter)
         
         del peopleCoordinates
 
         img = renderer.pop_and_render(img) # append human into img
         frameIndex += 1
+        DrawTextOnTopRight(img, f"{frameIndex}/{_videoInfo.videoTotalFrames}",  _videoInfo.videoWidth)
         renderClip.write(img)
         print(f"processed render for frame {frameIndex}/{_videoInfo.videoTotalFrames}")
 
@@ -376,7 +397,7 @@ def TEST_render_obj(IMAGE_FRAME, X, Y):
 '''
 
 if __name__ == "__main__":
-    refresh = False
+    refresh = True
     video_name = "PassBallTwoHands"
 
     parser = argparse.ArgumentParser(description="Your application's description")

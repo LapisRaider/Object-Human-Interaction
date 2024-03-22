@@ -2,6 +2,7 @@ import os
 import cv2
 import math
 from Rendering.lib.data_utils.kp_utils import get_spin_skeleton, get_spin_joint_names
+import numpy as np
 
 # Font settings
 FONT = cv2.FONT_HERSHEY_SIMPLEX
@@ -63,6 +64,11 @@ def DrawLineBetweenPoints(_frame, _startPt, _endPt, _text = "", _lineColor = (25
     cv2.putText(_frame, _text, (midPt[0], midPt[1] - 5), FONT, FONT_SCALE, FONT_COLOR, FONT_THICKNESS)
     return _frame
 
+def DrawTextOnTopRight(_frame, _text, _imgWidth):
+    textSize = cv2.getTextSize(_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+    sceneInfoX = (int)(_imgWidth - textSize[0])
+
+    cv2.putText(_frame, _text, (sceneInfoX, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 150,0), 2)
 
 """
     Calculate the Euclidean distance between two points in a 2-dimensional plane.
@@ -103,3 +109,20 @@ def FindIndexOfValueFromSortedArray(sortedArray, targetValue):
             right = mid - 1
 
     return -1
+
+def ConvertBboxToCenterWidthHeight(_bbox):
+        # Extract coordinates from bbox
+        minX, minY, maxX, maxY = _bbox
+
+        # Calculate height h
+        h = maxY - minY
+        w = maxX - minX
+
+        # Calculate center coordinates (c_x, c_y)
+        c_x = minX + w/2
+        c_y = minY + h/2
+
+        w = h = np.where(w / h > 1, w, h)
+
+        # Return as numpy array in shape (4,)
+        return [c_x, c_y, w, h]
