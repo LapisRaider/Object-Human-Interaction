@@ -175,19 +175,18 @@ def main(args):
                     frameIndex = FindIndexOfValueFromSortedArray(humanRenderData[otherObj.id]["frame_ids"], currFrame) # the fact that the obj had AABB collision with the human means the human exists in this frame
                     for keypt in ATTACHABLE_KEYPOINTS:
                         keyPtPos = humanRenderData[otherObj.id]["joints2d_img_coord"][frameIndex][keypt]
-                        c_x, c_y, w, h = obj.ConvertBboxToCenterWidthHeight()
-                        currDist = DistBetweenPoints((c_x, c_y), keyPtPos)
+                        currDist = DistBetweenPoints((interactableObj.renderPoint[0], interactableObj.renderPoint[1]), keyPtPos)
 
                         isPotentialAttachment = False
                         # TODO, HAVE TO CHECK SIZE OF BALL VIA BOUNDING BOX SIZE / 2 THEN + THRESHOLD FOR COMPARISON
                         # need to take note for objects that does not have the same width and height
                         if currDist < shortestDist and currDist <= MAX_DIST_FROM_KEYPOINT:
                             shortestDist = currDist
-                            interactableObj.Attach(otherObj.id, keypt, (keyPtPos[0] - c_x, keyPtPos[1] - c_y))
+                            interactableObj.Attach(otherObj.id, keypt, (interactableObj.renderPoint[0] - keyPtPos[0], interactableObj.renderPoint[1] - keyPtPos[1]))
                             isPotentialAttachment = True
 
                         lineColor = (0, 255, 0) if isPotentialAttachment else (0, 0, 255)
-                        DrawLineBetweenPoints(newFrame, (int(c_x), int(c_y)), (int(keyPtPos[0]), int(keyPtPos[1])), f'{currDist}', lineColor, 1)
+                        DrawLineBetweenPoints(newFrame, (int(interactableObj.renderPoint[0]), int(interactableObj.renderPoint[1])), (int(keyPtPos[0]), int(keyPtPos[1])), f'{currDist}', lineColor, 1)
                     
                     DrawSkeleton(newFrame, humanRenderData[otherObj.id]["joints2d_img_coord"][frameIndex], ATTACHABLE_KEYPOINTS)
             
