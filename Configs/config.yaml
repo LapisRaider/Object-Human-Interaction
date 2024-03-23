@@ -4,6 +4,10 @@ output_folder_dir_path: "Output"
 interactable_objs:
     "sports ball": "3D_Models/"
 
+objs_data:
+    # min number of frames the object must appear to be considered valid
+    min_frame_appearances: 40
+
 # for object detection
 yolo_params:
     checkpoint_file: "Data/yolov8x.pt"
@@ -50,3 +54,19 @@ vibe_params:
     smooth_results: True
     smooth_min_cutoff: 0.004
     smooth_beta: 1.5
+
+# parameters related to attaching obj to an existing keypoint
+obj_keypoint_attachment_params:
+    max_distance: 90 # pixel distance
+
+    attachable_keypoints: [4, 7] # keypoints the object can attach to. Based on Renderin/lib/data_utils get_spin_joint_names()
+
+obj_smoothing:
+    max_missing_frames: 10 # maximum number of frame an obj can go missing before it is deemed out of frame
+
+render_output:
+    # Whether the models would be in wireframe mode
+    isWireframe: True
+
+    # Overlay the animation and models over the original video
+    renderOnOriVid: True
