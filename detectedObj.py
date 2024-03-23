@@ -28,7 +28,7 @@ class HumanInteractableObject(DetectedObj):
         self.attachedToObjId = -1 # id of object it is attached to
         self.boneAttached = -1 # which bone is it attached to
 
-        c_x, c_y, w, h = ConvertBboxToCenterWidthHeight(_oriBBox)
+        c_x, c_y, w, h = ConvertBboxToCenterWidthHeight(_bbox)
         self.renderPoint = [c_x, c_y]
         self.width = w
         self.heigh = h

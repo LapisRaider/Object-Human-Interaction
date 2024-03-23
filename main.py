@@ -52,7 +52,70 @@ def main(args):
         with open(args.detectionPKL, 'rb') as f:
             objsInFrames = joblib.load(f)
 
-    # Load things needed to check for object collision
+    # start detecting objects and checking for collisions in every frame
+    print("Pre-process: Detect objects and remove possible false positives")
+    currFrame = 0
+    if objDetector != None:
+        objDetectedFrames = {}
+
+        while True:
+            hasFrames, vidFrameData = videoDrawer.video.read() # gives in BGR format
+            if not hasFrames:
+                break
+
+            # detect + track objs
+            objsInFrames[currFrame] = objDetector.DetectObjs(vidFrameData, yoloModel, configs["yolo_params"])
+            
+            # update the number of frames the obj appeared in
+            for obj in objsInFrames[currFrame]:
+                if obj.id not in objDetectedFrames:
+                    objDetectedFrames[obj.id] = 0
+
+                objDetectedFrames[obj.id] = objDetectedFrames[obj.id] + 1
+
+            currFrame += 1
+            print(f"Object detection: frame {currFrame}/{videoDrawer.videoTotalFrames}")
+
+        # for objs that have very little frame
+        invalidObjIds = set()
+        for objId, frameCount in objDetectedFrames.items():
+            if frameCount < configs["objs_data"]["min_frame_appearances"]:
+                invalidObjIds.add(objId)
+
+        print(f'{invalidObjIds} are removed as they appear in too little frames')
+        
+        # filter out the invalid objects and draw the detected information
+        currFrame = 0
+        videoDrawer.ResetVideo()
+        while True:
+            hasFrames, vidFrameData = videoDrawer.video.read() # gives in BGR format
+            if not hasFrames:
+                break
+        
+            delObjs = [obj for obj in objsInFrames[currFrame] if obj.id in invalidObjIds]
+            objsInFrames[currFrame] = [obj for obj in objsInFrames[currFrame] if obj.id not in invalidObjIds]
+
+            # draw the detected information
+            newFrame = vidFrameData.copy()
+            objDetector.Draw(newFrame, objsInFrames[currFrame])
+            objDetector.Draw(newFrame, delObjs, False)
+            DrawTextOnTopRight(newFrame, f"{currFrame}/{videoDrawer.videoTotalFrames}",  videoDrawer.videoWidth)
+            objDetectionClip.write(newFrame)
+
+            currFrame += 1
+
+        joblib.dump(objsInFrames, os.path.join(videoDrawer.outputPath, "detected.pkl"))
+        objDetectionClip.release()
+        del objDetector
+        del invalidObjIds
+        del objDetectedFrames
+
+    print("Finish detection of objects + post processing")
+
+   
+    # check for collisions between objects
+    print("Check collision between humans and objects")
+    videoDrawer.ResetVideo()
     objCollisions = {}
     objCollisionChecker = None
     collisionClip = None
@@ -63,44 +126,28 @@ def main(args):
         print("Read data from existing collision data from PKL file")
         with open(args.collisionDetectionPKL, 'rb') as f:
             objCollisions = joblib.load(f)
-
-    # start detecting objects and checking for collisions in every frame
-    print("Pre-process: Detect objects and possible collision between objects and humans")
-    currFrame = 0
-    if objDetector != None and objCollisionChecker != None:
+    
+    if objCollisionChecker != None:
+        currFrame = 0
         while True:
             hasFrames, vidFrameData = videoDrawer.video.read() # gives in BGR format
             if not hasFrames:
                 break
-
-            # detect + track objs
-            if objDetector != None:
-                objsInFrames[currFrame] = objDetector.DetectObjs(vidFrameData, yoloModel, configs["yolo_params"])
-                newFrame = vidFrameData.copy()
-                objDetector.Draw(newFrame, objsInFrames[currFrame])
-                DrawTextOnTopRight(newFrame, f"{currFrame}/{videoDrawer.videoTotalFrames}",  videoDrawer.videoWidth)
-                objDetectionClip.write(newFrame)
-
-            # check collision between objs and human
-            if objCollisionChecker != None:
-                objCollisions[currFrame] = objCollisionChecker.CheckCollision(objsInFrames[currFrame])
-                newFrame = vidFrameData.copy()
-                objCollisionChecker.Draw(newFrame, objCollisions[currFrame])
-                DrawTextOnTopRight(newFrame, f"{currFrame}/{videoDrawer.videoTotalFrames}",  videoDrawer.videoWidth)
-                collisionClip.write(newFrame)
+    
+            objCollisions[currFrame] = objCollisionChecker.CheckCollision(objsInFrames[currFrame])
+            newFrame = vidFrameData.copy()
+            objCollisionChecker.Draw(newFrame, objCollisions[currFrame])
+            DrawTextOnTopRight(newFrame, f"{currFrame}/{videoDrawer.videoTotalFrames}",  videoDrawer.videoWidth)
+            collisionClip.write(newFrame)
 
             currFrame += 1
-            print(f"processed frame {currFrame}/{videoDrawer.videoTotalFrames}")
 
-    if objDetector != None:
-        joblib.dump(objsInFrames, os.path.join(videoDrawer.outputPath, "detected.pkl"))
-        objDetectionClip.release()
-        del objDetector
-
-    if objCollisionChecker != None:
+        # dump info
         joblib.dump(objCollisions, os.path.join(videoDrawer.outputPath, "object_collisions.pkl"))
         collisionClip.release()
         del objCollisionChecker
+    
+    print("Collision detection completed")
     
 
     # create SMPL parameters
@@ -117,10 +164,10 @@ def main(args):
                     if obj.id not in humans:
                         humans[obj.id] = PreProcessPersonData([], None, [], obj.id)
                     
-                    humans[obj.id].bboxes.append(ConvertBboxToCenterWidthHeight(obj.originalBbox))
+                    humans[obj.id].bboxes.append(ConvertBboxToCenterWidthHeight(obj.bbox))
                     # humans[obj.id].joints2D.append(obj.bbox)
                     humans[obj.id].frames.append(frameNo)
-        
+
         # Run VIBE
         smplParamCreator = VidSMPLParamCreator(args.input, configs["vibe_params"])
         humanRenderData = smplParamCreator.processPeopleInVid(humans.values(), videoDrawer.outputPath)
@@ -140,11 +187,8 @@ def main(args):
     # for the objects find the nearest point to attach to or render
     print("Computing whether object is to be attached to a person or not")
 
-    objFrameAppearances = {} # {obj id: [frame number it appears in]}
-    objsData = {} # {frameId: [objs that appear]}
-
-
-    if args.objKeyPtRawData == '' and args.objInFramesRawPKL == '':
+    if args.objKeyPtRawData == '':
+        objsData = {} # {frameId: [objs that appear]}
         ATTACHABLE_KEYPOINTS = set(configs["obj_keypoint_attachment_params"]["attachable_keypoints"])
         MAX_DIST_FROM_KEYPOINT = configs["obj_keypoint_attachment_params"]["max_distance"]
 
@@ -166,10 +210,6 @@ def main(args):
                 for otherObj in objsCollidedWith:
                     interactableObj = HumanInteractableObject.from_parent(obj)
                     objsData[currFrame].append(interactableObj)
-                    if obj.id not in objFrameAppearances:
-                        objFrameAppearances[obj.id] = []
-
-                    objFrameAppearances[obj.id].append(currFrame)
         
                     # compare with humans keypoints to see whether to attach
                     frameIndex = FindIndexOfValueFromSortedArray(humanRenderData[otherObj.id]["frame_ids"], currFrame) # the fact that the obj had AABB collision with the human means the human exists in this frame
@@ -197,56 +237,14 @@ def main(args):
 
         objAttachmentClip.release()
         joblib.dump(objsData, os.path.join(videoDrawer.outputPath, "obj_kpt_attachment.pkl"))
-        joblib.dump(objFrameAppearances, os.path.join(videoDrawer.outputPath, "obj_raw_frame_appearances.pkl"))
     else:
         print("Read data from existing PKL file")
         with open(args.objKeyPtRawData, 'rb') as f:
             objsData = joblib.load(f)
-
-        with open(args.objInFramesRawPKL, 'rb') as f:
-            objFrameAppearances = joblib.load(f)
     
     del objCollisions
     
-
     print("Computation for object's attachment is completed")
-
-
-    # TODO: If object has missing frames, clean up data
-    # check missing frames objFrameAppearances
-    # MAX_MISSING_FRAMES = configs["obj_smoothing"]["max_missing_frames"]
-    # for objId, frameAppearances in objFrameAppearances.items():
-
-    #     for i in range(1, len(frameAppearances)):
-    #         frameDiff = frameAppearances[i] - frameAppearances[i - 1]
-
-    #         # no missing frames
-    #         if frameDiff == 0:
-    #             continue
-
-    #         # went over threshold, most likely left the frame
-    #         if frameDiff > MAX_MISSING_FRAMES:
-    #             continue
-
-    #         lastFrame = frameAppearances[i - 1]
-
-    '''
-        Various different states:
-            both no grab: interpolate positions via kinematic equation
-            both grab + same person id: frames in between we will assume that it is still attached to same person
-            both grab + diff person id: idk fuckin pray??
-                the ball left first person temporarily and second person grab
-                first person passed to second person
-
-            1 grab, the other does not: have to interpolate between frames and based on dist, predict when its still attached and when its not
-
-        Based on the states, add the missing data
-
-    '''
-    
-    #for r in range (frameDiff):
-
-
 
 
     # render the objects and humans
@@ -407,7 +405,6 @@ if __name__ == "__main__":
         parser.add_argument("--detectionPKL", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
         parser.add_argument("--collisionDetectionPKL", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
         parser.add_argument("--objKeyPtRawData", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
-        parser.add_argument("--objInFramesRawPKL", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
     else:
         parser.add_argument("--input", default='Input/'+ video_name + '.mp4', type=str, help="File path for video")
         parser.add_argument("--config", default='Configs/config.yaml', type=str, help="File path for config file")
@@ -415,7 +412,6 @@ if __name__ == "__main__":
         parser.add_argument("--detectionPKL", default='Output/' + video_name + '/detected.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
         parser.add_argument("--collisionDetectionPKL", default='Output/' + video_name + '/object_collisions.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
         parser.add_argument("--objKeyPtRawData", default='Output/' + video_name + '/obj_kpt_attachment.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
-        parser.add_argument("--objInFramesRawPKL", default='Output/' + video_name + '/obj_raw_frame_appearances.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
 
     arguments = parser.parse_args()
     

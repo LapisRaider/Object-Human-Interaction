@@ -67,7 +67,7 @@ class VideoObjDetector():
 
         for track in self.deepsortTracker.tracks:
             # track is inactive
-            if not track.is_confirmed() or track.time_since_update > 1:
+            if not track.is_confirmed():
                 continue
             detectedObj = DetectedObj(
                 track.track_id, 
@@ -81,10 +81,17 @@ class VideoObjDetector():
         return objs;
 
 
-    def Draw(self, _frame, _objs):
+    def Draw(self, _frame, _objs, isValid = True):
+        TRACKING_BOX_COLOR = [0, 255, 0]
+        ORIGINAL_BOX_COLOR = [255, 255, 0]
+
+        if not isValid:
+            TRACKING_BOX_COLOR = [0, 0, 0]
+            ORIGINAL_BOX_COLOR = [100, 100, 100]
+
         for obj in _objs:
-            DrawBox(_frame, obj.bbox, [0, 255, 0], 2)
-            DrawBox(_frame, obj.originalBbox, [255, 0, 0], 1)
+            DrawBox(_frame, obj.bbox, TRACKING_BOX_COLOR, 2)
+            DrawBox(_frame, obj.originalBbox, ORIGINAL_BOX_COLOR, 1)
             cv2.putText(_frame, f'id: {obj.id}', (int(obj.bbox[0]), int(obj.bbox[1]) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
             cv2.putText(_frame, f'c: {obj.className}', (int(obj.bbox[0]), int(obj.bbox[1]) + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
             cv2.putText(_frame, f's: {obj.conf}', (int(obj.bbox[0]), int(obj.bbox[1]) + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)

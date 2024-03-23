@@ -4,6 +4,10 @@ output_folder_dir_path: "Output"
 interactable_objs:
     "sports ball": "3D_Models/"
 
+objs_data:
+    # min number of frames the object must appear to be considered valid
+    min_frame_appearances: 40
+
 # for object detection
 yolo_params:
     checkpoint_file: "Data/yolov8x.pt"
