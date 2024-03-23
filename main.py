@@ -313,7 +313,6 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
                                 translation=[pos_x, pos_y, pos_z])
 
         # render objs in video
-        objCounter = 0
         for obj in _objRenderData[frameIndex]:
             pos_z = 1.0 if obj.id not in objCoordinates else objCoordinates[obj.id].z
             obj_screenX = obj.renderPoint[0]
@@ -357,9 +356,6 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
                 scale=[obj_scale, obj_scale, obj_scale],
                 color=[0.05, 1.0, 1.0],
             )
-
-            objCounter += 1
-            print(objCounter)
         
         del peopleCoordinates
 
