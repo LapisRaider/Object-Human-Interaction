@@ -17,6 +17,7 @@ from utils import DrawSkeleton, DistBetweenPoints, DrawLineBetweenPoints, FindIn
 
 import sys
 sys.path.insert(0, 'Rendering')
+import lib.vibe_obj.utils as vibe_obj
 from vidSMPLParamCreator import PreProcessPersonData, VidSMPLParamCreator
 from lib.utils.renderer import Renderer
 from lib.utils.demo_utils import (
@@ -27,8 +28,13 @@ from lib.vibe_obj.utils import get_rotation
 
 # [VIBE-Object Start]
 import math
-import lib.vibe_obj.utils as vibe_obj
 import resize
+
+import maths_util
+import mtx_util
+from vec3 import Vec3
+from mtx import Mtx
+from quat import Quat
 # [VIBE-Object End]
 
 yoloModel = None
@@ -281,86 +287,200 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
     _videoInfo.ResetVideo()
 
     fov = math.radians(60)
+    tan_half_fov = math.tan(fov * 0.5)
+    aspect_ratio = float(_videoInfo.videoWidth)/float(_videoInfo.videoHeight)
+
+    # Last known object transformations.
+    ws_obj_pos = {} # Key: Obj Id, Value: Object World Space Position (Coordinates)
+    ws_obj_scale_y = {} # Key: Obj Id, Value: Object World Space Scale Y (float)
+    ws_obj_rot = {}
+
+    # Camera rotation.
+    cam_pivot_angle = 0.0
+    cam_angular_velocity = 1.0
+    cam_pivot_pos_z = -2.5
+
     frameIndex = 0
-    objCoordinates = {} # key: obj Id, value: Coordinates object
     while True:
         hasFrames, img = _videoInfo.video.read() # gives in BGR format
         if not hasFrames:
             break
 
-        renderer.push_persp_cam(fov)
+        # Calculate Rotating Camera View Matrix
+        view_matrix = Mtx.identity(4)
+        view_matrix = mtx_util.translation_matrix(Vec3(0.0, 0.0, 1.5 * -cam_pivot_pos_z)) * view_matrix # 1. Move objects to origin.
+        view_matrix = mtx_util.rotation_matrix_y(cam_pivot_angle * maths_util.deg2rad) * view_matrix # 2. Rotate objects.
+        view_matrix = mtx_util.translation_matrix(Vec3(0.0, 0.0, cam_pivot_pos_z)) * view_matrix # 3. Push objects out. Or something, I don't fucking know anymore and frankly, I don't care either.
+ 
+        # Convert Mtx to numpy matrix.
+        cam_pose = np.eye(4)
+        for col in range(4):
+            for row in range(4):
+                cam_pose[row, col] = view_matrix[col, row]
 
-        # render people in video
-        peopleCoordinates = {}
+        # Push camera.
+        renderer.push_persp_cam(fov, cam_pose)
+
+        # Render people.
+        ws_person_pos = {} # World Space Person Positions (Coordinates)
+        ws_hand_pos = {} # World Space Hand Positions (Coordinates)
+        ws_hand_rot = {}
         for person_id, person_data in frame_results[frameIndex].items():
             frame_verts = person_data['verts']
             frame_cam = person_data['cam']
-            # [VIBE-Object Start]
             frame_joints3d = person_data['joints3d']
-            # [VIBE-Object End]
+            frame_pose = person_data['pose']
 
-            tan_half_fov = math.tan(fov * 0.5)
             sx, sy, tx, ty = frame_cam
-            pos_z = -1.0 / (sy * tan_half_fov)
-            pos_y = -ty
-            pos_x = tx
+            ws_pos_x = tx # World Space Position X
+            ws_pos_y = -ty # World Space Position Y
+            ws_pos_z = -1.0 / (sy * tan_half_fov) # World Space Position Z
+            ws_person_pos[person_id] = Coordinates(ws_pos_x, ws_pos_y, ws_pos_z) # World Space Position
 
-            peopleCoordinates[person_id] = Coordinates(pos_x, pos_y, pos_z)
-            
-            mc = mesh_color[person_id]
+            # Render
             renderer.push_human(verts=frame_verts, # Add human to scene.
-                                color=mc,
-                                translation=[pos_x, pos_y, pos_z])
+                                color=mesh_color[person_id],
+                                translation=[ws_pos_x, ws_pos_y, ws_pos_z])
 
-        # render objs in video
+            # Get hand position.
+            # We have to negate the Y & Z, because the 3D model provided by VIBE is actually upside down,
+            # and what VIBE does is that it hardcodes a 180 degree rotation on the X axis just before rendering.
+            # So we simulate that 180 degree rotation on the X axis by just negating the Y & Z.
+            hand_pos = vibe_obj.get_left_wrist_translation(frame_joints3d)
+            ws_hand_pos[person_id] = Coordinates(hand_pos[0] + ws_pos_x,
+                                                 -hand_pos[1] + ws_pos_y,
+                                                 -hand_pos[2] + ws_pos_z)
+            
+            # Get hand rotation.
+            # TODO: Find rotation. Don't forget about the 3D model being upside down.
+            ws_hand_rot[person_id] = None
+
+        # Render Objects.
+        '''
+        !!!!!!!!SUPER IMPORTANT!!!!!!!!
+        Because we have no way of knowing how big our object's model is, without building some sort of bounding box when loading the 3D model,
+        we assume that all our 3D models are of size 1. For example, a ball of diameter 1, or a cube of WxLxH = 1x1x1.
+        That way they'll be appropriately sized after scaling in code.
+        '''
         for obj in _objRenderData[frameIndex]:
-            pos_z = 1.0 if obj.id not in objCoordinates else objCoordinates[obj.id].z
-            obj_screenX = obj.renderPoint[0]
-            obj_screenY = obj.renderPoint[1]
-            offset = [0, 0 , 0]
-            axis = [0, 0, 0]
-            angle = 0
+            ss_height = obj.height # Screen Space Height
+            ss_pos_x = obj.renderPoint[0] # Screen Space Position X
+            ss_pos_y = obj.renderPoint[1] # Screen Space Position Y
 
-            # if object is attached to a person initialize values from parenting
-            if obj.isAttached and obj.attachedToObjId in peopleCoordinates:
-                pos_z = peopleCoordinates[obj.attachedToObjId].z
+            # Case 1: Object is attached to person.
+            # We know the Z value of the object. (e.g. From the person's hand.)
+            # Using that Z value, we can find the scale of the object.
+            if obj.isAttached and obj.attachedToObjId in ws_person_pos:
+                '''
+                # Find world position via screen space position.
+                ws_pos_z = ws_person_pos[obj.attachedToObjId].z # World Space Position Z
+                ws_pos_x, ws_pos_y, ws_pos_z = renderer.screenspace_to_worldspace(ss_pos_x, ss_pos_y, ws_pos_z) # World Space Position
 
+                # Update last known object position.
+                ws_obj_pos[obj.id] = Coordinates(ws_pos_x, ws_pos_y, ws_pos_z)
+                '''
+
+                # What is the offset between the object and the hand?
+                ws_offset_x = 0.0 # TODO: Find the Offset
+                ws_offset_y = 0.0
+                ws_offset_z = 0.0
+
+                # Find world space position via attached hand.
+                ws_pos_x = ws_hand_pos[obj.attachedToObjId].x
+                ws_pos_y = ws_hand_pos[obj.attachedToObjId].y
+                ws_pos_z = ws_hand_pos[obj.attachedToObjId].z
+
+                # Update last known object position.
+                # TODO: Account for offset too? Or maybe not?
+                ws_obj_pos[obj.id] = Coordinates(ws_pos_x, ws_pos_y, ws_pos_z)
+                
+                # What is the hand rotation?
+                # TODO: Find rotation.
+                ws_angle = 0.0
+                ws_axis = [1.0, 0.0, 0.0]
+
+                # Update last known object rotation.
+                ws_obj_rot[obj.id] = None
+
+                # Find Scale
+                ws_scale_y = resize.get_world_height(ss_height, _videoInfo.videoHeight, fov, ws_pos_z) # Use the screen space height to estimate the world space height. Prefer height over width as height does not have to deal with aspect ratio in all circumstances.
+
+                # Update last known object scale.
+                # ws_obj_scale_y[obj.id] = ws_scale_y
+                ws_obj_scale_y[obj.id] = ws_scale_y
+
+                renderer.push_obj(
+                    '3D_Models/sphere.obj',
+                    translation_offset=[ws_offset_x, ws_offset_y, ws_offset_z],
+                    translation=[ws_pos_x + ws_offset_x, ws_pos_y + ws_offset_y, ws_pos_z + ws_offset_z],
+                    angle=ws_angle,
+                    axis=ws_axis,
+                    scale=[ws_scale_y, ws_scale_y, ws_scale_y],
+                    color=[0.05, 1.0, 1.0])
+
+                '''
                 smpl_pose = frame_results[frameIndex][obj.attachedToObjId]['pose']
                 axis_angle = get_rotation(smpl_pose, map_spin_to_smpl()[obj.boneAttached]) 
                 axis = axis_angle[1:4]
                 angle = axis_angle[0] * (180.0/math.pi)
 
+                
                 # overall screen x and y coordinates are the same, but the transformation order is different
-                offset = [obj.offset[0], obj.offset[1], 0]
                 # TODO: now using 2d keypoint position instead of smpl 3d position, might want to change
                 humanFrameIndex = FindIndexOfValueFromSortedArray(_humanRenderData[obj.attachedToObjId]["frame_ids"], frameIndex)
                 joint2DCoords = _humanRenderData[obj.attachedToObjId]["joints2d_img_coord"][humanFrameIndex][obj.boneAttached]
                 jointWorldCoords = renderer.screenspace_to_worldspace(joint2DCoords[0], joint2DCoords[1], pos_z)
-                objWorldCoords = renderer.screenspace_to_worldspace(obj_screenX, obj_screenY, pos_z)
+                objWorldCoords = renderer.screenspace_to_worldspace(ss_pos_x, ss_pos_y, pos_z)
                 
                 offset = [objWorldCoords[0] - jointWorldCoords[0], objWorldCoords[1] - jointWorldCoords[1], 0]
-                obj_screenX, obj_screenY = joint2DCoords
-                
+                ss_pos_x, ss_pos_y = joint2DCoords
 
-            obj_scale = resize.get_world_height(obj.width, _videoInfo.videoHeight, fov, pos_z)
-            obj_x, obj_y, obj_z = renderer.screenspace_to_worldspace(obj_screenX, obj_screenY, pos_z)
+                obj_scale = resize.get_world_height(obj.width, _videoInfo.videoHeight, fov, pos_z)
+                obj_x, obj_y, obj_z = renderer.screenspace_to_worldspace(ss_pos_x, ss_pos_y, pos_z)
+                ws_obj_pos[obj.id] = Coordinates(obj_x, obj_y, obj_z)
+                '''
 
-            objCoordinates[obj.id] = Coordinates(obj_x, obj_y, obj_z)
+            # Case 2: Object is not attached to person.
+            # We don't know the Z value of the object.
+            # Using the scale of the object (we assume the object is already correctly scaled), find the Z value of the object.
+            else:
+                # Get the last known world space scale of the object.
+                ws_scale_y = 1.0 if obj.id not in ws_obj_scale_y else ws_obj_scale_y[obj.id]
 
-            renderer.push_obj(
-                '3D_Models/sphere.obj',
-                translation_offset=offset,
-                translation=[obj_x, obj_y, obj_z],
-                angle=angle,
-                axis=axis,
-                scale=[obj_scale, obj_scale, obj_scale],
-                color=[0.05, 1.0, 1.0],
-            )
-        
-        del peopleCoordinates
+                # Get the NDC transforms of the object. NDC is range [-1, 1].
+                ndc_scale_y = 2.0 * ss_height / _videoInfo.videoHeight
+                ndc_pos_x = -(ss_pos_x / _videoInfo.videoWidth * 2.0 - 1.0)
+                ndc_pos_y = ss_pos_y / _videoInfo.videoHeight * 2.0 - 1.0
 
-        img = renderer.pop_and_render(img) # append human into img
+                # How far must the object be in world space, such that it's NDC scale is correct?
+                ws_pos_z = -ws_scale_y / (ndc_scale_y * tan_half_fov) # Negate because the camera is looking down the -Z axis.
+                ws_pos_y = tan_half_fov * ws_pos_z * ndc_pos_y
+                ws_pos_x = tan_half_fov * ws_pos_z * ndc_pos_x * aspect_ratio
+                ws_obj_pos[obj.id] = Coordinates(ws_pos_x, ws_pos_y, ws_pos_z)
+
+                # print("Object Position: (" + str(ws_pos_z) + ", " + str(ws_pos_y) + ", " + str(ws_pos_z) + ")")
+
+                # Get the last known world space rotation of the object.
+                # TODO: Find rotation.
+                # ws_rot = (0.0, (1.0, 0.0, 0.0)) if obj.id not in ws_obj_rot else ws_obj_rot[obj.id]
+                ws_angle = 0.0
+                ws_axis = [0.0, 0.0, 0.0]
+
+                renderer.push_obj(
+                    '3D_Models/sphere.obj',
+                    translation_offset=[0.0, 0.0, 0.0],
+                    translation=[ws_pos_x, ws_pos_y, ws_pos_z],
+                    angle=ws_angle,
+                    axis=ws_axis,
+                    scale=[ws_scale_y, ws_scale_y, ws_scale_y],
+                    color=[0.0, 1.0, 1.0])
+
+        # Clear ws_person_pos for next frame.
+        del ws_person_pos
+
+        img = renderer.pop_and_render(img)
         frameIndex += 1
+        cam_pivot_angle += cam_angular_velocity
         DrawTextOnTopRight(img, f"{frameIndex}/{_videoInfo.videoTotalFrames}",  _videoInfo.videoWidth)
         renderClip.write(img)
         print(f"processed render for frame {frameIndex}/{_videoInfo.videoTotalFrames}")
@@ -369,8 +489,8 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
 
 
 if __name__ == "__main__":
-    refresh = True
-    video_name = "PassBallTwoHands"
+    refresh = False
+    video_name = "ThrowBall_2People"
 
     parser = argparse.ArgumentParser(description="Your application's description")
     if refresh == True:

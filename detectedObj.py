@@ -33,7 +33,7 @@ class HumanInteractableObject(DetectedObj):
 
         self.renderPoint = [predictionBboxConverstion[0], predictionBboxConverstion[1]]
         self.width = originalBboxConverstion[2]
-        self.heigh = originalBboxConverstion[3]
+        self.height = originalBboxConverstion[3]
         self.offset = (0 , 0) # offset away from interactable point
 
     @classmethod
