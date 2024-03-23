@@ -28,10 +28,12 @@ class HumanInteractableObject(DetectedObj):
         self.attachedToObjId = -1 # id of object it is attached to
         self.boneAttached = -1 # which bone is it attached to
 
-        c_x, c_y, w, h = ConvertBboxToCenterWidthHeight(_bbox)
-        self.renderPoint = [c_x, c_y]
-        self.width = w
-        self.heigh = h
+        predictionBboxConverstion = ConvertBboxToCenterWidthHeight(_bbox)
+        originalBboxConverstion = ConvertBboxToCenterWidthHeight(_oriBBox)
+
+        self.renderPoint = [predictionBboxConverstion[0], predictionBboxConverstion[1]]
+        self.width = originalBboxConverstion[2]
+        self.heigh = originalBboxConverstion[3]
         self.offset = (0 , 0) # offset away from interactable point
 
     @classmethod

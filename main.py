@@ -77,6 +77,7 @@ def main(args):
             print(f"Object detection: frame {currFrame}/{videoDrawer.videoTotalFrames}")
 
         # for objs that have very little frame
+        print(f'{objDetectedFrames} object frame counts')
         invalidObjIds = set()
         for objId, frameCount in objDetectedFrames.items():
             if frameCount < configs["objs_data"]["min_frame_appearances"]:
@@ -98,7 +99,7 @@ def main(args):
             # draw the detected information
             newFrame = vidFrameData.copy()
             objDetector.Draw(newFrame, objsInFrames[currFrame])
-            objDetector.Draw(newFrame, delObjs, False)
+            # objDetector.Draw(newFrame, delObjs, False)
             DrawTextOnTopRight(newFrame, f"{currFrame}/{videoDrawer.videoTotalFrames}",  videoDrawer.videoWidth)
             objDetectionClip.write(newFrame)
 
@@ -164,8 +165,9 @@ def main(args):
                     if obj.id not in humans:
                         humans[obj.id] = PreProcessPersonData([], None, [], obj.id)
                     
-                    humans[obj.id].bboxes.append(ConvertBboxToCenterWidthHeight(obj.bbox))
-                    # humans[obj.id].joints2D.append(obj.bbox)
+                    # we use the originalBbox as the sizes are much more accurate
+                    humans[obj.id].bboxes.append(ConvertBboxToCenterWidthHeight(obj.originalBbox))
+                    # humans[obj.id].joints2D.append(obj.originalBbox)
                     humans[obj.id].frames.append(frameNo)
 
         # Run VIBE
@@ -205,12 +207,12 @@ def main(args):
             objsData[currFrame] = []
             for obj, objsCollidedWith in objCollisions[currFrame].items():
                 shortestDist = float('inf')
+                interactableObj = HumanInteractableObject.from_parent(obj)
+                objsData[currFrame].append(interactableObj)
                 
                 # check nearest distance
                 for otherObj in objsCollidedWith:
-                    interactableObj = HumanInteractableObject.from_parent(obj)
-                    objsData[currFrame].append(interactableObj)
-        
+
                     # compare with humans keypoints to see whether to attach
                     frameIndex = FindIndexOfValueFromSortedArray(humanRenderData[otherObj.id]["frame_ids"], currFrame) # the fact that the obj had AABB collision with the human means the human exists in this frame
                     for keypt in ATTACHABLE_KEYPOINTS:
@@ -370,29 +372,6 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
     renderClip.release()
 
 
-'''     
-def TEST_render_obj(IMAGE_FRAME, X, Y):
-    renderer = Renderer(resolution=(IMAGE_FRAME.videoWidth, IMAGE_FRAME.videoHeight), orig_img=True, wireframe=False, renderOnWhite=True)
-
-    renderer.push_default_cam()
-    location = renderer.screenspace_to_worldspace(X, Y)
-
-    print("World space location")
-    print(location)
-    renderer.push_obj(
-        '3D_Models/sphere.obj',
-        translation= [location[0], location[1], 1],
-        angle=0,
-        axis=[0,0,0],
-        scale=[0.2, 0.2, 0.2],
-        color=[1.0, 0.0, 0.0],
-    )
-
-    img = renderer.pop_and_render()
-    cv2.imshow('Image', img)
-    cv2.waitKey(0)
-'''
-
 if __name__ == "__main__":
     refresh = True
     video_name = "PassBallTwoHands"
@@ -421,6 +400,3 @@ if __name__ == "__main__":
     availableObjs = configs.get("interactable_objs", {})
     
     main(arguments)
-    #TEST_PKL(arguments)
-    # videoDrawer = VideoDrawer("Input/video11.mp4", configs["output_folder_dir_path"])
-    # TEST_render_obj(videoDrawer, 0, 0)
