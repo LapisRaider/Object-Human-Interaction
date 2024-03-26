@@ -48,7 +48,8 @@ def main(args):
     if args.detectionPKL == '':
         yoloModel = YOLO(configs["yolo_params"]["checkpoint_file"])
         objDetectionClip = videoDrawer.CreateNewClip("objDetection")
-        objDetector = VideoObjDetector(configs["deepsort_params"], [0, 32])
+        objsId = [configs["human_id"]] + list(configs["interactable_objs"].keys())
+        objDetector = VideoObjDetector(configs["deepsort_params"], objsId)
     else:
         print("Read data from existing detection data from PKL file")
         with open(args.detectionPKL, 'rb') as f:
@@ -124,7 +125,7 @@ def main(args):
     collisionClip = None
     if args.collisionDetectionPKL == '':
         collisionClip = videoDrawer.CreateNewClip("collision")
-        objCollisionChecker = VideoEntityCollisionDetector([32])
+        objCollisionChecker = VideoEntityCollisionDetector(list(configs["interactable_objs"].keys()))
     else:
         print("Read data from existing collision data from PKL file")
         with open(args.collisionDetectionPKL, 'rb') as f:
@@ -292,7 +293,6 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
     ws_obj_scale_y = {} # Key: Obj Id, Value: Object World Space Scale Y (float)
 
     # Camera rotation.
-    enable_cam_rotation = False
     cam_angular_velocity = 1.0
     cam_pivot_pos_z = -2.5
     current_cam_angle = 0.0
@@ -308,7 +308,7 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
         # 2. Rotate objects.
         # 3. Push objects out.
         # Or something, I don't fucking know anymore and frankly, I don't care either.
-        if enable_cam_rotation:
+        if _renderConfigs["rotateCamera"]:
             view_matrix = mtx_util.translation_matrix(Vec3(0.0, 0.0, 1.5 * -cam_pivot_pos_z)) 
             view_matrix = mtx_util.rotation_matrix_y(current_cam_angle * maths_util.deg2rad) * view_matrix 
             view_matrix = mtx_util.translation_matrix(Vec3(0.0, 0.0, cam_pivot_pos_z)) * view_matrix
@@ -396,7 +396,7 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
 
                 # Render.
                 renderer.push_obj(
-                    '3D_Models/monkey.obj',
+                    configs["interactable_objs"][obj.className],
                     translation_offset=[offset.x, offset.y, offset.z],
                     translation=[ws_pos.x, ws_pos.y, ws_pos.z],
                     angle=angle,
@@ -431,7 +431,7 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
 
                 # Render.
                 renderer.push_obj(
-                    '3D_Models/monkey.obj',
+                    configs["interactable_objs"][obj.className],
                     translation_offset=[0.0, 0.0, 0.0],
                     translation=[ws_pos.x, ws_pos.y, ws_pos.z],
                     angle=angle,
@@ -454,7 +454,7 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
 
 if __name__ == "__main__":
     refresh = False
-    video_name = "ThrowBall_2People"
+    video_name = "PassBallTwoHands"
 
     parser = argparse.ArgumentParser(description="Your application's description")
     if refresh == True:

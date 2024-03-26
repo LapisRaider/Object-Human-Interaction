@@ -1,8 +1,11 @@
 output_folder_dir_path: "Output"
 
-# hashmap <name of class based on dataset, 3D model for it>
+# id of the human based on the dataset
+human_id: 0
+
+# hashmap <id of class based on dataset, 3D model for it>
 interactable_objs:
-    "sports ball": "3D_Models/"
+    32: "3D_Models/sphere.obj" # sports ball
 
 objs_data:
     # min number of frames the object must appear to be considered valid
@@ -70,3 +73,6 @@ render_output:
 
     # Overlay the animation and models over the original video
     renderOnOriVid: True
+
+    # rotate camera 360 degrees around scene
+    rotateCamera: False
