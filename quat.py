@@ -8,6 +8,10 @@ from mtx import Mtx
 
 class Quat:
     @classmethod
+    def identity(cls):
+        return cls(1.0, 0.0, 0.0, 0.0)
+
+    @classmethod
     def from_axis_angle(cls, axis=Vec3(1.0, 0.0, 0.0), angle=0.0):
         w = math.cos(angle * 0.5)
         x = axis.x * math.sin(angle * 0.5)
@@ -21,7 +25,7 @@ class Quat:
     
     def rotate_via_axis_angle(point : Vec3, axis : Vec3, angle : float) -> Vec3:
         return Quat.rotate_via_quaternion(point, Quat.from_axis_angle(axis, angle))
-
+    
     def __init__(self, w, x, y, z):
         self.w = w # Scalar component.
         self.x = x # Vector component X.
