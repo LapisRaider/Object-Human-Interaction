@@ -380,13 +380,27 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
                 ls_joint = skeleton_util.get_bone_position(joints3d[obj.attachedToObjId], obj.boneAttached)
                 ls_joint = Quat.rotate_via_axis_angle(ls_joint, Vec3.x_axis(), maths_util.pi) # 180 degree X rotation.
                 ws_joint = ls_joint + ws_person_pos[obj.attachedToObjId]
+                print("world space")
+                print(ws_person_pos[obj.attachedToObjId])
+                print(ls_joint)
+
+                KEYPOINT_COLOR = (0, 255, 0)
+                test = resize_util.world_to_screen(fov, _videoInfo.videoWidth, _videoInfo.videoHeight, ws_joint.x, ws_joint.y, ws_joint.z)
+                print(test)
+                cv2.circle(img, (int(test.x), int(test.y)), 8, KEYPOINT_COLOR, 3)
+                KEYPOINT_COLOR = (0, 255, 255)
+                est = resize_util.world_to_screen(fov, _videoInfo.videoWidth, _videoInfo.videoHeight, ws_person_pos[obj.attachedToObjId].x, ws_person_pos[obj.attachedToObjId].y, ws_person_pos[obj.attachedToObjId].z)
+                print(est)
+                cv2.circle(img, (int(est.x), int(est.y)), 8, KEYPOINT_COLOR, 3)
                 
                 # Find object's world position via screen space position.
                 ws_pos = resize_util.screen_to_world_xy(fov, _videoInfo.videoWidth, _videoInfo.videoHeight, ss_pos_x, ss_pos_y, ws_joint.z)
                 ws_obj_pos[obj.id] = ws_pos
 
+
                 # Find the offset.
                 offset = ws_pos - ws_joint
+                ws_pos = ws_pos - offset
 
                 # Find scale.
                 # Use the screen space height to estimate the world space height.
@@ -399,7 +413,7 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
                     configs["interactable_objs"][obj.className],
                     translation_offset=[offset.x, offset.y, offset.z],
                     translation=[ws_pos.x, ws_pos.y, ws_pos.z],
-                    angle=angle,
+                    angle=0,
                     axis=[axis.x, axis.y, axis.z],
                     scale=[ws_scale_y, ws_scale_y, ws_scale_y],
                     color=[0.05, 1.0, 1.0])

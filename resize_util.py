@@ -20,6 +20,20 @@ def screen_to_world_xy(fov : float, resolution_x : float, resolution_y : float, 
 
     return Vec3(ws_pos_x, ws_pos_y, ws_pos_z)
 
+def world_to_screen(fov : float, resolution_x : float, resolution_y : float, world_pos_x : float, world_pos_y : float, world_pos_z : float):
+    aspect_ratio = float(resolution_x)/float(resolution_y)
+
+    # convert world to NDC
+    ndc_x = world_to_ndc_x(fov, aspect_ratio, world_pos_x, world_pos_z)
+    ndc_y = world_to_ndc_y(fov, world_pos_y, world_pos_z)
+
+    # convert ndc to screen
+    ss_pos_x = ((ndc_x + 1.0) / 2.0) * resolution_x
+    ss_pos_y = ((ndc_y + 1.0) / 2.0) * resolution_y
+    
+    return Vec3(ss_pos_x, ss_pos_y, 0.0)
+
+
 def screen_to_ndc_x(resolution_x : float, ss_pos_x : float):
     return -(ss_pos_x / resolution_x * 2.0 - 1.0)
 

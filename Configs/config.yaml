@@ -5,7 +5,7 @@ human_id: 0
 
 # hashmap <id of class based on dataset, 3D model for it>
 interactable_objs:
-    32: "3D_Models/sphere.obj" # sports ball
+    32: "3D_Models/monkey.obj" # sports ball
 
 objs_data:
     # min number of frames the object must appear to be considered valid
