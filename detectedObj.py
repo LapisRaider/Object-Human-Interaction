@@ -8,6 +8,22 @@ class DetectedObj:
         self.className = _className
         self.id = _id
 
+    @classmethod
+    def clone(cls, obj):
+        _id = obj.id
+        _bbox = obj.bbox
+        _oriBBox = obj.originalBbox
+        _conf = obj.conf
+        _className = obj.className
+
+        return cls(_id, _bbox, _oriBBox, _conf, _className)
+
+    '''
+        Will move the box by a certain offset given a x and y coordinates
+    '''
+    def applyOffset(self, _offsetX, _offsetY):
+        self.bbox = [self.bbox[0] + _offsetX, self.bbox[1] + _offsetY, self.bbox[2] + _offsetX, self.bbox[3] + _offsetY]
+
     def collidesWith(self, _other):
         minX, minY, maxX, maxY = self.bbox
         otherMinX, otherMinY, otherMaxX, otherMaxY = _other.bbox

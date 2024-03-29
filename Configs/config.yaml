@@ -28,7 +28,8 @@ yolo_params:
     device: "cuda:0"
 
 # Deepsort, Object tracking model, settings
-deepsort_params:
+tracking_params:
+    # for deepsort
     checkpoint_file: "./Data/mars-small128.pb"
 
     # if false, uses euclidean distance
@@ -45,6 +46,14 @@ deepsort_params:
 
     # Number of frames that a track remains in initialization phase.
     n_init: 1
+
+    # use kalman prediction for tracking.
+    useKalmanPredict: False
+
+    # add linear interpolation for tracking, if there are missing frames, linearly interpolate the obect
+    useLinearInterpolation: True
+
+    max_missing_frames: 40
 
 vibe_params:
     checkpoint_file: ""

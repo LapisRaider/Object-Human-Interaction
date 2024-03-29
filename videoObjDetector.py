@@ -12,6 +12,7 @@ from utils import DrawBox
 from videoDrawer import VideoDrawer
 from detectedObj import DetectedObj
 
+from typing import Dict, List
 
 # Detect and track certain class objs throughout the frames
 class VideoObjDetector():
@@ -33,8 +34,10 @@ class VideoObjDetector():
             _deepSortConfigs["n_init"],
             )
         
-    def DetectObjs(self, _vidFrameData, _yoloModel, _yoloConfigs):
-        objs = []
+        self.useKalmanPrediction =  _deepSortConfigs["useKalmanPredict"]
+        
+    def DetectObjs(self, _vidFrameData, _yoloModel, _yoloConfigs) -> Dict[int, DetectedObj]:
+        objs : Dict[int, DetectedObj] = {}
 
         results = _yoloModel.predict(
             _vidFrameData, 
@@ -69,6 +72,10 @@ class VideoObjDetector():
             # track is inactive
             if not track.is_confirmed():
                 continue
+
+            if not self.useKalmanPrediction and track.time_since_update > 1:
+                continue
+
             detectedObj = DetectedObj(
                 track.track_id, 
                 track.to_tlbr(), 
@@ -76,7 +83,7 @@ class VideoObjDetector():
                 track.initialDetectionData["score"], 
                 track.initialDetectionData["class"]
                 )
-            objs.append(detectedObj)
+            objs[track.track_id] = (detectedObj)
 
         return objs;
 

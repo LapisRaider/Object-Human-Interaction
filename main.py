@@ -12,7 +12,8 @@ import colorsys
 import numpy as np
 import pickle
 import joblib
-from detectedObj import HumanInteractableObject, Coordinates
+from detectedObj import HumanInteractableObject, Coordinates, DetectedObj
+from typing import Dict, List
 
 from utils import DrawSkeleton, DistBetweenPoints, DrawLineBetweenPoints, FindIndexOfValueFromSortedArray, ConvertBboxToCenterWidthHeight, DrawTextOnTopRight
 
@@ -42,14 +43,14 @@ def main(args):
     videoDrawer = VideoDrawer(args.input, configs["output_folder_dir_path"])
 
     # Load things needed for object detection
-    objsInFrames = {}
+    objsInFrames: Dict[int, Dict[int, DetectedObj]] = {}
     objDetector = None
     objDetectionClip = None
     if args.detectionPKL == '':
         yoloModel = YOLO(configs["yolo_params"]["checkpoint_file"])
         objDetectionClip = videoDrawer.CreateNewClip("objDetection")
         objsId = [configs["human_id"]] + list(configs["interactable_objs"].keys())
-        objDetector = VideoObjDetector(configs["deepsort_params"], objsId)
+        objDetector = VideoObjDetector(configs["tracking_params"], objsId)
     else:
         print("Read data from existing detection data from PKL file")
         with open(args.detectionPKL, 'rb') as f:
@@ -59,7 +60,7 @@ def main(args):
     print("Pre-process: Detect objects and remove possible false positives")
     currFrame = 0
     if objDetector != None:
-        objDetectedFrames = {}
+        objDetectedFrames : Dict[int, List[int]] = {}
 
         while True:
             hasFrames, vidFrameData = videoDrawer.video.read() # gives in BGR format
@@ -70,24 +71,48 @@ def main(args):
             objsInFrames[currFrame] = objDetector.DetectObjs(vidFrameData, yoloModel, configs["yolo_params"])
             
             # update the number of frames the obj appeared in
-            for obj in objsInFrames[currFrame]:
+            for obj in objsInFrames[currFrame].values():
                 if obj.id not in objDetectedFrames:
-                    objDetectedFrames[obj.id] = 0
+                    objDetectedFrames[obj.id] = []
 
-                objDetectedFrames[obj.id] = objDetectedFrames[obj.id] + 1
+                objDetectedFrames[obj.id].append(currFrame)
 
             currFrame += 1
             print(f"Object detection: frame {currFrame}/{videoDrawer.videoTotalFrames}")
 
         # for objs that have very little frame
-        print(f'{objDetectedFrames} object frame counts')
         invalidObjIds = set()
-        for objId, frameCount in objDetectedFrames.items():
-            if frameCount < configs["objs_data"]["min_frame_appearances"]:
+        for objId, frameAppearances in objDetectedFrames.items():
+            if len(frameAppearances) < configs["objs_data"]["min_frame_appearances"]:
                 invalidObjIds.add(objId)
 
-        print(f'{invalidObjIds} are removed as they appear in too little frames')
-        
+        print(f'{invalidObjIds} are removed as they appear in only {len(frameAppearances)} frames')
+
+        # Linear interpolation
+        if configs["tracking_params"]["useLinearInterpolation"]:
+            for objId, objFrameAppearances in objDetectedFrames.items():
+
+                for index in range(1, len(objFrameAppearances)):
+                    prevFrameIndex = objFrameAppearances[index - 1]
+                    currFrameIndex = objFrameAppearances[index]
+
+                    frameOffset: int = currFrameIndex - prevFrameIndex
+                    # if it is missing a frame and number of missing frames is less than a certain amt
+                    if frameOffset > 1 and frameOffset <= configs["tracking_params"]["max_missing_frames"]:
+                        objPrevBBox = objsInFrames[prevFrameIndex][objId].bbox
+                        objCurrBBox = objsInFrames[currFrameIndex][objId].bbox
+
+                        objPrevPos = ConvertBboxToCenterWidthHeight(objPrevBBox)[:2]
+                        objCurrPos =  ConvertBboxToCenterWidthHeight(objCurrBBox)[:2]
+
+                        # get speed per frame via displacement moved / frames between displacement
+                        dir = [(objCurrPos[0] - objPrevPos[0]) / frameOffset, (objCurrPos[1] - objPrevPos[1]) / frameOffset]
+
+                        for frameNumber in range(objFrameAppearances[index - 1] + 1, objFrameAppearances[index]):
+                            cloneObj = DetectedObj.clone(objsInFrames[frameNumber - 1][objId])
+                            cloneObj.applyOffset(dir[0], dir[1])
+                            objsInFrames[frameNumber][objId] = cloneObj
+
         # filter out the invalid objects and draw the detected information
         currFrame = 0
         videoDrawer.ResetVideo()
@@ -96,13 +121,13 @@ def main(args):
             if not hasFrames:
                 break
         
-            delObjs = [obj for obj in objsInFrames[currFrame] if obj.id in invalidObjIds]
-            objsInFrames[currFrame] = [obj for obj in objsInFrames[currFrame] if obj.id not in invalidObjIds]
+            delObjs = {objId: obj for objId, obj in objsInFrames[currFrame].items() if objId in invalidObjIds}
+            objsInFrames[currFrame] = {objId: obj for objId, obj in objsInFrames[currFrame].items() if objId not in invalidObjIds}
 
             # draw the detected information
             newFrame = vidFrameData.copy()
-            objDetector.Draw(newFrame, objsInFrames[currFrame])
-            # objDetector.Draw(newFrame, delObjs, False)
+            objDetector.Draw(newFrame, objsInFrames[currFrame].values())
+            objDetector.Draw(newFrame, delObjs.values(), False)
             DrawTextOnTopRight(newFrame, f"{currFrame}/{videoDrawer.videoTotalFrames}",  videoDrawer.videoWidth)
             objDetectionClip.write(newFrame)
 
@@ -110,8 +135,8 @@ def main(args):
 
         joblib.dump(objsInFrames, os.path.join(videoDrawer.outputPath, "detected.pkl"))
         objDetectionClip.release()
-        del objDetector
         del invalidObjIds
+        del objDetector
         del objDetectedFrames
 
     print("Finish detection of objects + post processing")
@@ -138,7 +163,7 @@ def main(args):
             if not hasFrames:
                 break
     
-            objCollisions[currFrame] = objCollisionChecker.CheckCollision(objsInFrames[currFrame])
+            objCollisions[currFrame] = objCollisionChecker.CheckCollision(objsInFrames[currFrame].values())
             newFrame = vidFrameData.copy()
             objCollisionChecker.Draw(newFrame, objCollisions[currFrame])
             DrawTextOnTopRight(newFrame, f"{currFrame}/{videoDrawer.videoTotalFrames}",  videoDrawer.videoWidth)
@@ -163,7 +188,7 @@ def main(args):
 
         # extract out info to feed into VIBE
         for frameNo, objInFrame in objsInFrames.items():
-            for obj in objInFrame:
+            for obj in objInFrame.values():
                 if obj.className == 0:
                     if obj.id not in humans:
                         humans[obj.id] = PreProcessPersonData([], None, [], obj.id)
@@ -381,17 +406,17 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
                 ls_joint = Quat.rotate_via_axis_angle(ls_joint, Vec3.x_axis(), maths_util.pi) # 180 degree X rotation.
                 ws_joint = ls_joint + ws_person_pos[obj.attachedToObjId]
                 print("world space")
-                print(ws_person_pos[obj.attachedToObjId])
-                print(ls_joint)
+                print(angle)
+                print(axis)
 
                 KEYPOINT_COLOR = (0, 255, 0)
                 test = resize_util.world_to_screen(fov, _videoInfo.videoWidth, _videoInfo.videoHeight, ws_joint.x, ws_joint.y, ws_joint.z)
-                print(test)
                 cv2.circle(img, (int(test.x), int(test.y)), 8, KEYPOINT_COLOR, 3)
                 KEYPOINT_COLOR = (0, 255, 255)
                 est = resize_util.world_to_screen(fov, _videoInfo.videoWidth, _videoInfo.videoHeight, ws_person_pos[obj.attachedToObjId].x, ws_person_pos[obj.attachedToObjId].y, ws_person_pos[obj.attachedToObjId].z)
-                print(est)
                 cv2.circle(img, (int(est.x), int(est.y)), 8, KEYPOINT_COLOR, 3)
+
+                DrawTextOnTopRight(img, f"{angle}/{axis}",  _videoInfo.videoWidth, 40)
                 
                 # Find object's world position via screen space position.
                 ws_pos = resize_util.screen_to_world_xy(fov, _videoInfo.videoWidth, _videoInfo.videoHeight, ss_pos_x, ss_pos_y, ws_joint.z)
@@ -400,7 +425,7 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
 
                 # Find the offset.
                 offset = ws_pos - ws_joint
-                ws_pos = ws_pos - offset
+                # ws_pos = ws_pos - offset
 
                 # Find scale.
                 # Use the screen space height to estimate the world space height.
@@ -411,9 +436,9 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
                 # Render.
                 renderer.push_obj(
                     configs["interactable_objs"][obj.className],
-                    translation_offset=[offset.x, offset.y, offset.z],
+                    translation_offset=[0, 0, 0],
                     translation=[ws_pos.x, ws_pos.y, ws_pos.z],
-                    angle=0,
+                    angle=angle,
                     axis=[axis.x, axis.y, axis.z],
                     scale=[ws_scale_y, ws_scale_y, ws_scale_y],
                     color=[0.05, 1.0, 1.0])
@@ -467,7 +492,7 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
 
 
 if __name__ == "__main__":
-    refresh = False
+    refresh = True
     video_name = "PassBallTwoHands"
 
     parser = argparse.ArgumentParser(description="Your application's description")

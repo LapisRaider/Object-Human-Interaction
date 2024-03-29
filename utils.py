@@ -64,11 +64,11 @@ def DrawLineBetweenPoints(_frame, _startPt, _endPt, _text = "", _lineColor = (25
     cv2.putText(_frame, _text, (midPt[0], midPt[1] - 5), FONT, FONT_SCALE, FONT_COLOR, FONT_THICKNESS)
     return _frame
 
-def DrawTextOnTopRight(_frame, _text, _imgWidth):
+def DrawTextOnTopRight(_frame, _text, _imgWidth, _height = 20):
     textSize = cv2.getTextSize(_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
     sceneInfoX = (int)(_imgWidth - textSize[0])
 
-    cv2.putText(_frame, _text, (sceneInfoX, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 150,0), 2)
+    cv2.putText(_frame, _text, (sceneInfoX, _height), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 150,0), 2)
 
 """
     Calculate the Euclidean distance between two points in a 2-dimensional plane.
