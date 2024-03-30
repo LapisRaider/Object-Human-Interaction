@@ -412,7 +412,7 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
                     obj_transformations[obj.id].currJointRot = joint_rotation
 
                 # get the rotation difference from prev rotation and curr rotation
-                delta_jointRotation = joint_rotation * obj_transformations[obj.id].currJointRot
+                delta_jointRotation = joint_rotation * obj_transformations[obj.id].currJointRot.inversed()
                 obj_transformations[obj.id].currJointRot = joint_rotation
 
 
@@ -460,24 +460,24 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
 
                 # Render.
                 # attach via offset to make it follow hand
-                # renderer.push_obj(
-                #     configs["interactable_objs"][obj.className],
-                #     translation_offset=[offset.x, offset.y, 0.0],
-                #     translation=[ws_joint.x, ws_joint.y, ws_joint.z],
-                #     angle=angle,
-                #     axis=[axis.x, axis.y, axis.z],
-                #     scale=[ws_scale_y, ws_scale_y, ws_scale_y],
-                #     color=[0.05, 1.0, 1.0])
-                
-                # follow image position
                 renderer.push_obj(
                     configs["interactable_objs"][obj.className],
-                    translation_offset=[0.0,0.0, 0.0],
-                    translation=[ws_pos.x, ws_pos.y, ws_pos.z],
+                    translation_offset=[offset.x, offset.y, 0.0],
+                    translation=[ws_joint.x, ws_joint.y, ws_joint.z],
                     angle=angle,
                     axis=[axis.x, axis.y, axis.z],
                     scale=[ws_scale_y, ws_scale_y, ws_scale_y],
                     color=[0.05, 1.0, 1.0])
+                
+                # follow image position
+                # renderer.push_obj(
+                #     configs["interactable_objs"][obj.className],
+                #     translation_offset=[0.0,0.0, 0.0],
+                #     translation=[ws_pos.x, ws_pos.y, ws_pos.z],
+                #     angle=angle,
+                #     axis=[axis.x, axis.y, axis.z],
+                #     scale=[ws_scale_y, ws_scale_y, ws_scale_y],
+                #     color=[0.05, 1.0, 1.0])
 
             # Case 2: Object is not attached to person.
             # We don't know the Z value of the object.
