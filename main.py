@@ -398,48 +398,52 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
 
                 # Find object's world position via screen space position.
                 ws_pos = resize_util.screen_to_world_xy(fov, _videoInfo.videoWidth, _videoInfo.videoHeight, ss_pos_x, ss_pos_y, ws_joint.z)
-                obj_transformations[obj.id].currPos = ws_pos
 
                 # Find joint's current rotation.
                 smpl_pose = frame_results[frameIndex][obj.attachedToObjId]['pose']
                 bone_id = skeleton_util.map_spin_to_smpl()[obj.boneAttached]
-                rotation = skeleton_util.get_bone_rotation(smpl_pose, bone_id)
-                rotation = rotation * Quat.from_axis_angle(Vec3.x_axis(), maths_util.pi) # 180 degree X rotation.
+                joint_rotation = skeleton_util.get_bone_rotation(smpl_pose, bone_id)
+                joint_rotation = joint_rotation * Quat.from_axis_angle(Vec3.x_axis(), maths_util.pi) # 180 degree X rotation.
 
-                # Find the offset.
-                #offset = ws_pos - ws_joint
-                # ws_pos = ws_pos - offset
-
-                if obj_transformations[obj.id].currAttachedObjId != obj.attachedToObjId:
+                if obj_transformations[obj.id].currAttachedObjId != obj.attachedToObjId or obj_transformations[obj.id].currJointId != obj.boneAttached:
+                    obj_transformations[obj.id].currJointId = obj.boneAttached
                     obj_transformations[obj.id].currAttachedObjId = obj.attachedToObjId
                     obj_transformations[obj.id].initialAttachOffset = ws_pos - ws_joint # find offset
-                    obj_transformations[obj.id].initialAttachRotation = rotation
+                    obj_transformations[obj.id].currJointRot = joint_rotation
 
+                # get the rotation difference from prev rotation and curr rotation
+                delta_jointRotation = joint_rotation * obj_transformations[obj.id].currJointRot
+                obj_transformations[obj.id].currJointRot = joint_rotation
 
-                # get the rotation difference from base rotation and curr rotation
-                baseRotation = obj_transformations[obj.id].initialAttachRotation
-                print("rotations")
-                print(baseRotation)
-                print(rotation)
-                rotation = rotation * baseRotation.inversed()
-                print(rotation)
-                axis_angle = rotation.to_axis_angle()
-                axis = axis_angle[0]
-                angle = axis_angle[1]
-                print("angle")
-                print(angle)
 
                 offset = obj_transformations[obj.id].initialAttachOffset
-                ws_pos = ws_pos - offset
+                # ws_pos = ws_pos - offset
 
                 # update values
-                obj_transformations[obj.id].currRot = rotation
+                obj_transformations[obj.id].currRot = obj_transformations[obj.id].currRot * delta_jointRotation
                 obj_transformations[obj.id].currPos = ws_pos
 
+                axis_angle = obj_transformations[obj.id].currRot.to_axis_angle()
+                axis = axis_angle[0]
+                angle = axis_angle[1]
 
-                KEYPOINT_COLOR = (0, 255, 0)
-                test = resize_util.world_to_screen(fov, _videoInfo.videoWidth, _videoInfo.videoHeight, ws_joint.x, ws_joint.y, ws_joint.z)
-                cv2.circle(img, (int(test.x), int(test.y)), 8, KEYPOINT_COLOR, 3)
+
+                KEYPOINT_COLOR = (255, 255, 255)
+                x_point = Quat.rotate_via_quaternion(Vec3.x_axis() * 0.1, joint_rotation) + ws_joint
+                x_point = resize_util.world_to_screen(fov, _videoInfo.videoWidth, _videoInfo.videoHeight, x_point.x, x_point.y, x_point.z)
+                y_point = Quat.rotate_via_quaternion(Vec3.y_axis() * 0.1, joint_rotation) + ws_joint
+                y_point = resize_util.world_to_screen(fov, _videoInfo.videoWidth, _videoInfo.videoHeight, y_point.x, y_point.y, y_point.z)
+                z_point = Quat.rotate_via_quaternion(Vec3.z_axis()* 0.1, joint_rotation) + ws_joint
+                z_point = resize_util.world_to_screen(fov, _videoInfo.videoWidth, _videoInfo.videoHeight, z_point.x, z_point.y, z_point.z)
+
+                jointRenderPosition = resize_util.world_to_screen(fov, _videoInfo.videoWidth, _videoInfo.videoHeight, ws_joint.x, ws_joint.y, ws_joint.z)
+                
+                cv2.circle(img, (int(jointRenderPosition.x), int(jointRenderPosition.y)), 8, KEYPOINT_COLOR, 3)
+                cv2.line(img, (int(jointRenderPosition.x), int(jointRenderPosition.y)), (int(x_point.x), int(x_point.y)), (0,0,255), 2)
+                cv2.line(img, (int(jointRenderPosition.x), int(jointRenderPosition.y)), (int(y_point.x), int(y_point.y)), (0,255,0), 2)
+                cv2.line(img, (int(jointRenderPosition.x), int(jointRenderPosition.y)), (int(z_point.x), int(z_point.y)), (255,0,0), 2)
+
+
                 KEYPOINT_COLOR = (0, 255, 255)
                 est = resize_util.world_to_screen(fov, _videoInfo.videoWidth, _videoInfo.videoHeight, ws_person_pos[obj.attachedToObjId].x, ws_person_pos[obj.attachedToObjId].y, ws_person_pos[obj.attachedToObjId].z)
                 cv2.circle(img, (int(est.x), int(est.y)), 8, KEYPOINT_COLOR, 3)
@@ -455,9 +459,20 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
                 obj_transformations[obj.id].currScaleY = ws_scale_y
 
                 # Render.
+                # attach via offset to make it follow hand
+                # renderer.push_obj(
+                #     configs["interactable_objs"][obj.className],
+                #     translation_offset=[offset.x, offset.y, 0.0],
+                #     translation=[ws_joint.x, ws_joint.y, ws_joint.z],
+                #     angle=angle,
+                #     axis=[axis.x, axis.y, axis.z],
+                #     scale=[ws_scale_y, ws_scale_y, ws_scale_y],
+                #     color=[0.05, 1.0, 1.0])
+                
+                # follow image position
                 renderer.push_obj(
                     configs["interactable_objs"][obj.className],
-                    translation_offset=[offset.x, offset.y, offset.z],
+                    translation_offset=[0.0,0.0, 0.0],
                     translation=[ws_pos.x, ws_pos.y, ws_pos.z],
                     angle=angle,
                     axis=[axis.x, axis.y, axis.z],
