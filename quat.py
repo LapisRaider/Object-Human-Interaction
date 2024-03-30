@@ -67,7 +67,10 @@ class Quat:
             return (axis, angle)
 
         axis = xyz.normalised()
+
+        self.w = max(min(self.w, 1.0), -1.0)
         angle = math.acos(self.w) * 2.0
+
         return (axis, angle)
     
     def to_rotation_matrix(self) -> Mtx:

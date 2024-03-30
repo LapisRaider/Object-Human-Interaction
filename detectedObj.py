@@ -1,4 +1,7 @@
 from utils import ConvertBboxToCenterWidthHeight
+from vec3 import Vec3
+from quat import Quat
+
 
 class DetectedObj:
     def __init__(self, _id, _bbox, _oriBBox, _conf, _className):
@@ -75,3 +78,14 @@ class Coordinates:
         self.x = x
         self.y = y
         self.z = z
+
+class ObjectTransformation:
+    def __init__(self):
+        self.currPos : Vec3 = Vec3.zero()
+        self.currRot : Quat = Quat.identity()
+        self.currScaleY : float = 1.0
+
+        # for attachment
+        self.currAttachedObjId : int = -1; # curr obj it is attached to
+        self.initialAttachRotation : Quat = Quat.identity()
+        self.initialAttachOffset: Vec3 = Vec3.zero()

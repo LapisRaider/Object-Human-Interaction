@@ -12,7 +12,7 @@ import colorsys
 import numpy as np
 import pickle
 import joblib
-from detectedObj import HumanInteractableObject, Coordinates, DetectedObj
+from detectedObj import HumanInteractableObject, ObjectTransformation, DetectedObj
 from typing import Dict, List
 
 from utils import DrawSkeleton, DistBetweenPoints, DrawLineBetweenPoints, FindIndexOfValueFromSortedArray, ConvertBboxToCenterWidthHeight, DrawTextOnTopRight
@@ -313,9 +313,7 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
     aspect_ratio = float(_videoInfo.videoWidth)/float(_videoInfo.videoHeight)
 
     # Last known object transformations.
-    ws_obj_pos = {} # Key: Obj Id, Value: Object World Space Position (Vec3)
-    ws_obj_rot = {} # Key: Obj Id, Value: Object World Space Rotation (Quat)
-    ws_obj_scale_y = {} # Key: Obj Id, Value: Object World Space Scale Y (float)
+    obj_transformations : Dict[int, ObjectTransformation] = {}
 
     # Camera rotation.
     cam_angular_velocity = 1.0
@@ -332,7 +330,6 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
         # 1. Move objects to origin.
         # 2. Rotate objects.
         # 3. Push objects out.
-        # Or something, I don't fucking know anymore and frankly, I don't care either.
         if _renderConfigs["rotateCamera"]:
             view_matrix = mtx_util.translation_matrix(Vec3(0.0, 0.0, 1.5 * -cam_pivot_pos_z)) 
             view_matrix = mtx_util.rotation_matrix_y(current_cam_angle * maths_util.deg2rad) * view_matrix 
@@ -387,27 +384,58 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
             ss_pos_x = obj.renderPoint[0] # Screen Space Position X
             ss_pos_y = obj.renderPoint[1] # Screen Space Position Y
 
+            if obj.id not in obj_transformations:
+                obj_transformations[obj.id] = ObjectTransformation()
+
             # Case 1: Object is attached to person.
             # We know the Z value of the object. (e.g. From the person's hand.)
             # Using that Z value, we can find the scale of the object.
             if obj.isAttached and obj.attachedToObjId in ws_person_pos:
-                # Find rotation.
-                smpl_pose = frame_results[frameIndex][obj.attachedToObjId]['pose']
-                bone_id = skeleton_util.map_spin_to_smpl()[obj.boneAttached]
-                rotation = skeleton_util.get_bone_rotation(smpl_pose, bone_id)
-                rotation = rotation * Quat.from_axis_angle(Vec3.x_axis(), maths_util.pi) # 180 degree X rotation.
-                axis_angle = rotation.to_axis_angle()
-                axis = axis_angle[0]
-                angle = axis_angle[1]
-                ws_obj_rot[obj.id] = rotation
-
                 # Find the joint's world position.
                 ls_joint = skeleton_util.get_bone_position(joints3d[obj.attachedToObjId], obj.boneAttached)
                 ls_joint = Quat.rotate_via_axis_angle(ls_joint, Vec3.x_axis(), maths_util.pi) # 180 degree X rotation.
                 ws_joint = ls_joint + ws_person_pos[obj.attachedToObjId]
-                print("world space")
+
+                # Find object's world position via screen space position.
+                ws_pos = resize_util.screen_to_world_xy(fov, _videoInfo.videoWidth, _videoInfo.videoHeight, ss_pos_x, ss_pos_y, ws_joint.z)
+                obj_transformations[obj.id].currPos = ws_pos
+
+                # Find joint's current rotation.
+                smpl_pose = frame_results[frameIndex][obj.attachedToObjId]['pose']
+                bone_id = skeleton_util.map_spin_to_smpl()[obj.boneAttached]
+                rotation = skeleton_util.get_bone_rotation(smpl_pose, bone_id)
+                rotation = rotation * Quat.from_axis_angle(Vec3.x_axis(), maths_util.pi) # 180 degree X rotation.
+
+                # Find the offset.
+                #offset = ws_pos - ws_joint
+                # ws_pos = ws_pos - offset
+
+                if obj_transformations[obj.id].currAttachedObjId != obj.attachedToObjId:
+                    obj_transformations[obj.id].currAttachedObjId = obj.attachedToObjId
+                    obj_transformations[obj.id].initialAttachOffset = ws_pos - ws_joint # find offset
+                    obj_transformations[obj.id].initialAttachRotation = rotation
+
+
+                # get the rotation difference from base rotation and curr rotation
+                baseRotation = obj_transformations[obj.id].initialAttachRotation
+                print("rotations")
+                print(baseRotation)
+                print(rotation)
+                rotation = rotation * baseRotation.inversed()
+                print(rotation)
+                axis_angle = rotation.to_axis_angle()
+                axis = axis_angle[0]
+                angle = axis_angle[1]
+                print("angle")
                 print(angle)
-                print(axis)
+
+                offset = obj_transformations[obj.id].initialAttachOffset
+                ws_pos = ws_pos - offset
+
+                # update values
+                obj_transformations[obj.id].currRot = rotation
+                obj_transformations[obj.id].currPos = ws_pos
+
 
                 KEYPOINT_COLOR = (0, 255, 0)
                 test = resize_util.world_to_screen(fov, _videoInfo.videoWidth, _videoInfo.videoHeight, ws_joint.x, ws_joint.y, ws_joint.z)
@@ -416,27 +444,20 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
                 est = resize_util.world_to_screen(fov, _videoInfo.videoWidth, _videoInfo.videoHeight, ws_person_pos[obj.attachedToObjId].x, ws_person_pos[obj.attachedToObjId].y, ws_person_pos[obj.attachedToObjId].z)
                 cv2.circle(img, (int(est.x), int(est.y)), 8, KEYPOINT_COLOR, 3)
 
-                DrawTextOnTopRight(img, f"{angle}/{axis}",  _videoInfo.videoWidth, 40)
+                # DrawTextOnTopRight(img, f"{angle}/{axis}",  _videoInfo.videoWidth, 40)
                 
-                # Find object's world position via screen space position.
-                ws_pos = resize_util.screen_to_world_xy(fov, _videoInfo.videoWidth, _videoInfo.videoHeight, ss_pos_x, ss_pos_y, ws_joint.z)
-                ws_obj_pos[obj.id] = ws_pos
 
-
-                # Find the offset.
-                offset = ws_pos - ws_joint
-                # ws_pos = ws_pos - offset
 
                 # Find scale.
                 # Use the screen space height to estimate the world space height.
                 # Prefer height over width as height does not have to deal with aspect ratio in all circumstances.
                 ws_scale_y = resize_util.screen_to_world_height(ss_height, _videoInfo.videoHeight, fov, ws_pos.z)
-                ws_obj_scale_y[obj.id] = ws_scale_y
+                obj_transformations[obj.id].currScaleY = ws_scale_y
 
                 # Render.
                 renderer.push_obj(
                     configs["interactable_objs"][obj.className],
-                    translation_offset=[0, 0, 0],
+                    translation_offset=[offset.x, offset.y, offset.z],
                     translation=[ws_pos.x, ws_pos.y, ws_pos.z],
                     angle=angle,
                     axis=[axis.x, axis.y, axis.z],
@@ -447,8 +468,10 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
             # We don't know the Z value of the object.
             # Using the scale of the object (we assume the object is already correctly scaled), find the Z value of the object.
             else:
+                obj_transformations[obj.id].currAttachedObjId = -1 # not attach to anything
+
                 # Get the last known world space scale of the object.
-                ws_scale_y = 1.0 if obj.id not in ws_obj_scale_y else ws_obj_scale_y[obj.id]
+                ws_scale_y = obj_transformations[obj.id].currScaleY
 
                 # Get the NDC transforms of the object. NDC is range [-1, 1].
                 ndc_scale_y = 2.0 * ss_height / _videoInfo.videoHeight
@@ -460,10 +483,10 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
                 ws_pos = Vec3(tan_half_fov * ws_pos_z * ndc_pos_x * aspect_ratio,
                               tan_half_fov * ws_pos_z * ndc_pos_y,
                               ws_pos_z)
-                ws_obj_pos[obj.id] = ws_pos
+                obj_transformations[obj.id].currPos = ws_pos
 
                 # Get the last known rotation.
-                rotation = Quat.from_axis_angle(Vec3.x_axis(), 0.0) if obj.id not in ws_obj_rot else ws_obj_rot[obj.id]
+                rotation = obj_transformations[obj.id].currRot
                 axis_angle = rotation.to_axis_angle()
                 axis = axis_angle[0]
                 angle = axis_angle[1]
@@ -492,7 +515,7 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
 
 
 if __name__ == "__main__":
-    refresh = True
+    refresh = False
     video_name = "PassBallTwoHands"
 
     parser = argparse.ArgumentParser(description="Your application's description")
