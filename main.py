@@ -187,6 +187,10 @@ def main(args):
         humans = {}
 
         # extract out info to feed into VIBE
+        # if configs["runSimplify"]:
+
+
+
         for frameNo, objInFrame in objsInFrames.items():
             for obj in objInFrame.values():
                 if obj.className == 0:
@@ -299,7 +303,7 @@ def main(args):
 '''
 def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
     # for loop the objs in frame, render it
-    renderer = Renderer(resolution=(_videoInfo.videoWidth, _videoInfo.videoHeight), orig_img=_renderConfigs["renderOnOriVid"], wireframe=_renderConfigs["isWireframe"], renderOnWhite=True)
+    renderer = Renderer(resolution=(_videoInfo.videoWidth, _videoInfo.videoHeight), wireframe=_renderConfigs["isWireframe"])
 
     # dictionary, {frameNo: {humanId: verts, cam, joints3D, pose} }
     frame_results = prepare_rendering_results(_humanRenderData, _videoInfo.videoTotalFrames)
@@ -415,9 +419,7 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
                 delta_jointRotation = joint_rotation * obj_transformations[obj.id].currJointRot.inversed()
                 obj_transformations[obj.id].currJointRot = joint_rotation
 
-
                 offset = obj_transformations[obj.id].initialAttachOffset
-                # ws_pos = ws_pos - offset
 
                 # update values
                 obj_transformations[obj.id].currRot = obj_transformations[obj.id].currRot * delta_jointRotation
@@ -446,11 +448,7 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
 
                 KEYPOINT_COLOR = (0, 255, 255)
                 est = resize_util.world_to_screen(fov, _videoInfo.videoWidth, _videoInfo.videoHeight, ws_person_pos[obj.attachedToObjId].x, ws_person_pos[obj.attachedToObjId].y, ws_person_pos[obj.attachedToObjId].z)
-                cv2.circle(img, (int(est.x), int(est.y)), 8, KEYPOINT_COLOR, 3)
-
-                # DrawTextOnTopRight(img, f"{angle}/{axis}",  _videoInfo.videoWidth, 40)
-                
-
+                cv2.circle(img, (int(est.x), int(est.y)), 8, KEYPOINT_COLOR, 3)                
 
                 # Find scale.
                 # Use the screen space height to estimate the world space height.
@@ -459,8 +457,9 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
                 obj_transformations[obj.id].currScaleY = ws_scale_y
 
                 # Render.
-                # attach via offset to make it follow hand
-                renderer.push_obj(
+                if _renderConfigs["objAttachToJoint"]:
+                    # attach via offset to make it follow hand
+                    renderer.push_obj(
                     configs["interactable_objs"][obj.className],
                     translation_offset=[offset.x, offset.y, 0.0],
                     translation=[ws_joint.x, ws_joint.y, ws_joint.z],
@@ -468,16 +467,17 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
                     axis=[axis.x, axis.y, axis.z],
                     scale=[ws_scale_y, ws_scale_y, ws_scale_y],
                     color=[0.05, 1.0, 1.0])
-                
-                # follow image position
-                # renderer.push_obj(
-                #     configs["interactable_objs"][obj.className],
-                #     translation_offset=[0.0,0.0, 0.0],
-                #     translation=[ws_pos.x, ws_pos.y, ws_pos.z],
-                #     angle=angle,
-                #     axis=[axis.x, axis.y, axis.z],
-                #     scale=[ws_scale_y, ws_scale_y, ws_scale_y],
-                #     color=[0.05, 1.0, 1.0])
+                else:
+                    # follow image position
+                    renderer.push_obj(
+                        configs["interactable_objs"][obj.className],
+                        translation_offset=[0.0,0.0, 0.0],
+                        translation=[ws_pos.x, ws_pos.y, ws_pos.z],
+                        angle=angle,
+                        axis=[axis.x, axis.y, axis.z],
+                        scale=[ws_scale_y, ws_scale_y, ws_scale_y],
+                        color=[0.05, 1.0, 1.0])
+
 
             # Case 2: Object is not attached to person.
             # We don't know the Z value of the object.
@@ -500,7 +500,8 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
                               ws_pos_z)
                 obj_transformations[obj.id].currPos = ws_pos
 
-                # Get the last known rotation.
+                # Get the last known rotation. We do not change rotation here, hard to predict without a reference
+                # TODO: make sure obj is inside first
                 rotation = obj_transformations[obj.id].currRot
                 axis_angle = rotation.to_axis_angle()
                 axis = axis_angle[0]
@@ -519,7 +520,7 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
         # Clear ws_person_pos for next frame.
         del ws_person_pos
 
-        img = renderer.pop_and_render(img)
+        img = renderer.pop_and_render(img, _renderConfigs["renderOnWhite"])
         frameIndex += 1
         current_cam_angle += cam_angular_velocity
         DrawTextOnTopRight(img, f"{frameIndex}/{_videoInfo.videoTotalFrames}",  _videoInfo.videoWidth)

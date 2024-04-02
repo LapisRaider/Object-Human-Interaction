@@ -6,11 +6,10 @@ from pyrender.constants import RenderFlags
 from Rendering.lib.models.smpl import get_smpl_faces
 
 class Renderer:
-    def __init__(self, resolution=(224,224), orig_img=False, wireframe=False, renderOnWhite = False):
+    def __init__(self, resolution=(224,224), wireframe=False):
         self.resolution = resolution
 
         self.faces = get_smpl_faces()
-        self.orig_img = orig_img
         self.wireframe = wireframe
         self.renderer = pyrender.OffscreenRenderer(
             viewport_width=self.resolution[0],
@@ -41,8 +40,7 @@ class Renderer:
         self.human_nodes = []
         # [VIBE-Object End]
 
-        if renderOnWhite:
-            self.whiteBackground = np.full((self.resolution[1], self.resolution[0], 3), 255, dtype=np.uint8)
+        self.whiteBackground = np.full((self.resolution[1], self.resolution[0], 3), 255, dtype=np.uint8)
 
     def push_persp_cam(self, yfov, cam_pose=np.eye(4)):
         self.fov = yfov
@@ -115,7 +113,7 @@ class Renderer:
         mesh = pyrender.Mesh.from_trimesh(mesh, material=material)
         self.object_nodes.append(self.scene.add(mesh))
 
-    def pop_and_render(self, img = None):
+    def pop_and_render(self, img = None, _renderWhite = False):
         # Render triangles or wireframe.
         if self.wireframe:
             render_flags = RenderFlags.RGBA | RenderFlags.ALL_WIREFRAME
@@ -123,7 +121,7 @@ class Renderer:
             render_flags = RenderFlags.RGBA
 
         # background will just be white
-        if img is None:
+        if _renderWhite:
             img = self.whiteBackground
 
         # Combine current rendered scene with input image.

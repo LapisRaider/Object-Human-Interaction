@@ -4,6 +4,11 @@ import math
 from Rendering.lib.data_utils.kp_utils import get_spin_skeleton, get_spin_joint_names
 import numpy as np
 
+import resize_util
+from vec3 import Vec3
+from mtx import Mtx
+from quat import Quat
+
 # Font settings
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 FONT_SCALE = 0.2
@@ -69,6 +74,31 @@ def DrawTextOnTopRight(_frame, _text, _imgWidth, _height = 20):
     sceneInfoX = (int)(_imgWidth - textSize[0])
 
     cv2.putText(_frame, _text, (sceneInfoX, _height), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 150,0), 2)
+
+'''
+    Arguments:
+        ws_pt: point in world space
+        rotation: rotation of this point
+'''
+def DrawAxisAtPoint(_frame, _ws_pt, _rotation, _imgWidth, _height, _fov, _length = 0.2):
+    KEYPOINT_COLOR = (255, 255, 255)
+    x_point = Quat.rotate_via_quaternion(Vec3.x_axis() * _length, _rotation) + _ws_pt
+    x_point = resize_util.world_to_screen(_fov, _imgWidth, _height, x_point.x, x_point.y, x_point.z)
+    
+    y_point = Quat.rotate_via_quaternion(Vec3.y_axis() * _length, _rotation) + _ws_pt
+    y_point = resize_util.world_to_screen(_fov, _imgWidth, _height, y_point.x, y_point.y, y_point.z)
+    
+    z_point = Quat.rotate_via_quaternion(Vec3.z_axis()* _length, _rotation) + _ws_pt
+    z_point = resize_util.world_to_screen(_fov, _imgWidth, _height, z_point.x, z_point.y, z_point.z)
+
+    screenSpacePt = resize_util.world_to_screen(_fov, _imgWidth, _height, _ws_pt.x, _ws_pt.y, _ws_pt.z)
+                
+    cv2.circle(_frame, (int(screenSpacePt.x), int(screenSpacePt.y)), 8, KEYPOINT_COLOR, 3)
+    cv2.line(_frame, (int(screenSpacePt.x), int(screenSpacePt.y)), (int(x_point.x), int(x_point.y)), (0,0,255), 2)
+    cv2.line(_frame, (int(screenSpacePt.x), int(screenSpacePt.y)), (int(y_point.x), int(y_point.y)), (0,255,0), 2)
+    cv2.line(_frame, (int(screenSpacePt.x), int(screenSpacePt.y)), (int(z_point.x), int(z_point.y)), (255,0,0), 2)
+
+
 
 """
     Calculate the Euclidean distance between two points in a 2-dimensional plane.

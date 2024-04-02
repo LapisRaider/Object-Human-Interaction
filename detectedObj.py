@@ -86,6 +86,7 @@ class ObjectTransformation:
         self.currScaleY : float = 1.0
 
         # for attachment
+        self.currJointId : int = -1
         self.currAttachedObjId : int = -1; # curr obj it is attached to
-        self.initialAttachRotation : Quat = Quat.identity()
+        self.currJointRot : Quat = Quat.identity()
         self.initialAttachOffset: Vec3 = Vec3.zero()

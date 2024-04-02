@@ -5,7 +5,7 @@ human_id: 0
 
 # hashmap <id of class based on dataset, 3D model for it>
 interactable_objs:
-    32: "3D_Models/monkey.obj" # sports ball
+    32: "3D_Models/sphere.obj" # sports ball
 
 objs_data:
     # min number of frames the object must appear to be considered valid
@@ -78,10 +78,13 @@ obj_smoothing:
 
 render_output:
     # Whether the models would be in wireframe mode
-    isWireframe: True
+    isWireframe: False
 
-    # Overlay the animation and models over the original video
-    renderOnOriVid: True
+    # Overlay the animation and models over a white background. Else if false, will render on original image
+    renderOnWhite: True
 
     # rotate camera 360 degrees around scene
-    rotateCamera: False
+    rotateCamera: True
+
+    # if not attach to joint, position offset will follow detected object position instead of following joint's transformations
+    objAttachToJoint: False
