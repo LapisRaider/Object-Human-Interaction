@@ -10,6 +10,7 @@ from videoDrawer import VideoDrawer
 from videoEntityCollisionDetector import VideoEntityCollisionDetector
 import colorsys
 import numpy as np
+from tqdm import tqdm
 import pickle
 import joblib
 from detectedObj import HumanInteractableObject, ObjectTransformation, DetectedObj
@@ -23,6 +24,7 @@ from vidSMPLParamCreator import PreProcessPersonData, VidSMPLParamCreator
 from lib.utils.demo_utils import (
     prepare_rendering_results,
 )
+from lib.utils.pose_tracker import run_posetracker
 
 import resize_util
 import skeleton_util
@@ -185,26 +187,45 @@ def main(args):
     if args.smplPKL == '':
         print("Creating SMPL parameters from humans in video for every frame")
         humans = {}
+        tracking_results = None
 
         # extract out info to feed into VIBE
-        # if configs["runSimplify"]:
+        if configs["vibe_params"]["trackViaPose"]:
+            if not os.path.isabs(args.input):
+                absFilePathVid = os.path.join(os.getcwd(), args.input)
 
+            absStafFolderPath = os.path.join(os.getcwd(), "openposetrack")
+            absVidOutput = os.path.join(os.getcwd(), videoDrawer.outputPath)
+            tracking_results = run_posetracker(os.path.normpath(absFilePathVid), staf_folder=absStafFolderPath, posetrack_output_folder=os.path.normpath(absVidOutput), display=True)
+            
+            for person_id in list(tracking_results.keys()):
+                if tracking_results[person_id]['frames'].shape[0] < configs["obj_smoothing"]["max_missing_frames"]:
+                    del tracking_results[person_id]
 
-
-        for frameNo, objInFrame in objsInFrames.items():
-            for obj in objInFrame.values():
-                if obj.className == 0:
-                    if obj.id not in humans:
-                        humans[obj.id] = PreProcessPersonData([], None, [], obj.id)
-                    
-                    # we use the originalBbox as the sizes are much more accurate
-                    humans[obj.id].bboxes.append(ConvertBboxToCenterWidthHeight(obj.originalBbox))
-                    # humans[obj.id].joints2D.append(obj.originalBbox)
-                    humans[obj.id].frames.append(frameNo)
+            print(tracking_results.keys())
+            
+            # format data
+            for person_id in tqdm(list(tracking_results.keys())):
+                humans[person_id] = PreProcessPersonData(None, tracking_results[person_id]['joints2d'], tracking_results[person_id]['frames'], person_id)
+        else:
+            # format object bounding box data detected from yolo to format for vibe
+            for frameNo, objInFrame in objsInFrames.items():
+                for obj in objInFrame.values():
+                    if obj.className == 0:
+                        if obj.id not in humans:
+                            humans[obj.id] = PreProcessPersonData([], None, [], obj.id)
+                        
+                        # we use the originalBbox as the sizes are much more accurate
+                        humans[obj.id].bboxes.append(ConvertBboxToCenterWidthHeight(obj.originalBbox))
+                        # humans[obj.id].joints2D.append(obj.originalBbox)
+                        humans[obj.id].frames.append(frameNo)
 
         # Run VIBE
+        print("GUMAN")
+        print(tracking_results)
         smplParamCreator = VidSMPLParamCreator(args.input, configs["vibe_params"])
         humanRenderData = smplParamCreator.processPeopleInVid(humans.values(), videoDrawer.outputPath)
+        
 
         del smplParamCreator
         del humans
@@ -217,6 +238,7 @@ def main(args):
         
         del objsInFrames
 
+    print(humanRenderData)
 
     # for the objects find the nearest point to attach to or render
     print("Computing whether object is to be attached to a person or not")
@@ -243,12 +265,20 @@ def main(args):
                 objsData[currFrame].append(interactableObj)
                 
                 # check nearest distance
-                for otherObj in objsCollidedWith:
+                '''
+                    HACK: 
+                    i am too tired to re-write my code cause i realize the openpose code works differently from mmpose
+                    I can't do the spend 5 hours on documentation anymore
+                    Basically if use object detection, use AABB collision to find which human has collision with the object to match keypoint
+                    Else if use pose detection, we will just iterate through all humans and check for keypoint match
+                '''
+                objsCollidedWithID = [obj.id for obj in objsCollidedWith] if not configs["vibe_params"]["trackViaPose"] else humanRenderData.keys()
+                for otherObjId in objsCollidedWithID:
 
                     # compare with humans keypoints to see whether to attach
-                    frameIndex = FindIndexOfValueFromSortedArray(humanRenderData[otherObj.id]["frame_ids"], currFrame) # the fact that the obj had AABB collision with the human means the human exists in this frame
+                    frameIndex = FindIndexOfValueFromSortedArray(humanRenderData[otherObjId]["frame_ids"], currFrame) # the fact that the obj had AABB collision with the human means the human exists in this frame
                     for keypt in ATTACHABLE_KEYPOINTS:
-                        keyPtPos = humanRenderData[otherObj.id]["joints2d_img_coord"][frameIndex][keypt]
+                        keyPtPos = humanRenderData[otherObjId]["joints2d_img_coord"][frameIndex][keypt]
                         currDist = DistBetweenPoints((interactableObj.renderPoint[0], interactableObj.renderPoint[1]), keyPtPos)
 
                         isPotentialAttachment = False
@@ -256,13 +286,13 @@ def main(args):
                         # need to take note for objects that does not have the same width and height
                         if currDist < shortestDist and currDist <= MAX_DIST_FROM_KEYPOINT:
                             shortestDist = currDist
-                            interactableObj.Attach(otherObj.id, keypt, (interactableObj.renderPoint[0] - keyPtPos[0], interactableObj.renderPoint[1] - keyPtPos[1]))
+                            interactableObj.Attach(otherObjId, keypt, (interactableObj.renderPoint[0] - keyPtPos[0], interactableObj.renderPoint[1] - keyPtPos[1]))
                             isPotentialAttachment = True
 
                         lineColor = (0, 255, 0) if isPotentialAttachment else (0, 0, 255)
                         DrawLineBetweenPoints(newFrame, (int(interactableObj.renderPoint[0]), int(interactableObj.renderPoint[1])), (int(keyPtPos[0]), int(keyPtPos[1])), f'{currDist}', lineColor, 1)
                     
-                    DrawSkeleton(newFrame, humanRenderData[otherObj.id]["joints2d_img_coord"][frameIndex], ATTACHABLE_KEYPOINTS)
+                    DrawSkeleton(newFrame, humanRenderData[otherObjId]["joints2d_img_coord"][frameIndex], ATTACHABLE_KEYPOINTS)
             
             DrawTextOnTopRight(newFrame, f"{currFrame}/{videoDrawer.videoTotalFrames}",  videoDrawer.videoWidth)
             objAttachmentClip.write(newFrame)
@@ -531,23 +561,23 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
 
 
 if __name__ == "__main__":
-    refresh = False
+    refresh = True
     video_name = "PassBallTwoHands"
 
     parser = argparse.ArgumentParser(description="Your application's description")
     if refresh == True:
         parser.add_argument("--input", default='Input/'+ video_name + '.mp4', type=str, help="File path for video")
         parser.add_argument("--config", default='Configs/config.yaml', type=str, help="File path for config file")
+        parser.add_argument("--detectionPKL",  default='Output/' + video_name + '/detected.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+        parser.add_argument("--collisionDetectionPKL", default='Output/' + video_name + '/object_collisions.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
         parser.add_argument("--smplPKL", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
-        parser.add_argument("--detectionPKL", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
-        parser.add_argument("--collisionDetectionPKL", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
         parser.add_argument("--objKeyPtRawData", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
     else:
         parser.add_argument("--input", default='Input/'+ video_name + '.mp4', type=str, help="File path for video")
         parser.add_argument("--config", default='Configs/config.yaml', type=str, help="File path for config file")
-        parser.add_argument("--smplPKL", default='Output/' + video_name + '/vibe_output.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
         parser.add_argument("--detectionPKL", default='Output/' + video_name + '/detected.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
         parser.add_argument("--collisionDetectionPKL", default='Output/' + video_name + '/object_collisions.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+        parser.add_argument("--smplPKL", default='Output/' + video_name + '/vibe_output.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
         parser.add_argument("--objKeyPtRawData", default='Output/' + video_name + '/obj_kpt_attachment.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
 
     arguments = parser.parse_args()

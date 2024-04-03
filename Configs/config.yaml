@@ -60,6 +60,10 @@ vibe_params:
 
     batch_size: 17
 
+    # if false, will track via bounding box detected from yolo
+    trackViaPose: False
+
+    # help smooth the results of the poses
     runSimplify: True
 
     # Use 1 euro filter to smooth the results
@@ -81,10 +85,10 @@ render_output:
     isWireframe: False
 
     # Overlay the animation and models over a white background. Else if false, will render on original image
-    renderOnWhite: True
+    renderOnWhite: False
 
     # rotate camera 360 degrees around scene
-    rotateCamera: True
+    rotateCamera: False
 
     # if not attach to joint, position offset will follow detected object position instead of following joint's transformations
     objAttachToJoint: False

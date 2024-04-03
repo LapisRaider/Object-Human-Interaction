@@ -53,3 +53,13 @@ cd Rendering/data
 gdown "https://drive.google.com/uc?id=1untXhYOLQtpNEy4GTY_0fL_H-k6cTf_r"
 unzip vibe_data.zip
 rm vibe_data.zip
+
+# for pose tracking for vibe
+git clone -b staf https://github.com/soulslicer/STAF.git openposetrack
+cd openposetrack/models
+
+wget -c "https://drive.google.com/uc?export=download&id=1vbwJHQehHXhfYdbvFS-a-6ZBgeFd-AGd" -P "pose/body_25/pose_iter_584000.caffemodel"
+wget -c "https://drive.google.com/uc?export=download&id=1gRM0NwOFd-GRRR4p0yCAyZV8w-kTXrNb" -P "pose/coco/pose_iter_440000.caffemodel"
+wget -c "https://drive.google.com/uc?export=download&id=1qoDtsnqIgVP-GD-USDMjaU2_Fs60-u0_" -P "pose/mpi/pose_iter_160000.caffemodel"
+wget -c "https://drive.google.com/uc?export=download&id=19RJ5NDwyK5W_iNGdUR8jCBCrGtTz26xy" -P "face/pose_iter_116000.caffemodel"
+wget -c "https://drive.google.com/uc?export=download&id=1iGU_trITlOu3AXQmGGx1B5KbdimnxJjx" -P "hand/pose_iter_102000.caffemodel"
