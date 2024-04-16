@@ -386,6 +386,15 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
         # Push camera.
         renderer.push_persp_cam(fov, cam_pose)
 
+        # Push floor.
+        renderer.push_obj('3D_Models/floor.obj',
+                          translation_offset=[0.0,0.0, 0.0],
+                          translation=[0.0, -1.1, 0.0],
+                          angle=0.0,
+                          axis=[1.0, 0.0, 0.0],
+                          scale=[10.0, 10.0, 1.0],
+                          color=[0.05, 0.2, 0.43])
+
         # Render people.
         ws_person_pos = {} # World Space Person Positions (Vec3)
         joints3d = {}
@@ -574,8 +583,8 @@ if __name__ == "__main__":
     if refresh == True:
         parser.add_argument("--input", default='Input/'+ video_name + '.mp4', type=str, help="File path for video")
         parser.add_argument("--config", default='Configs/config.yaml', type=str, help="File path for config file")
-        parser.add_argument("--detectionPKL",  default='Output/' + video_name + '/detected.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
-        parser.add_argument("--collisionDetectionPKL", default='Output/' + video_name + '/object_collisions.pkl', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+        parser.add_argument("--detectionPKL",  default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
+        parser.add_argument("--collisionDetectionPKL", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
         parser.add_argument("--smplPKL", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
         parser.add_argument("--objKeyPtRawData", default='', type=str, help="Pre-processed Pkl file containing smpl data of the video")
     else:
