@@ -153,6 +153,7 @@ def ConvertBboxToCenterWidthHeight(_bbox):
         c_y = minY + h/2
 
         w = h = np.where(w / h > 1, w, h)
+        bbox = np.array([c_x, c_y, w, h])
 
         # Return as numpy array in shape (4,)
-        return [c_x, c_y, w, h]
+        return bbox

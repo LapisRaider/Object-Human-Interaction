@@ -17,14 +17,15 @@ class VideoDrawer:
         vidName, vidFileExtension = os.path.splitext(videoFileName)
         self.outputPath = f"{_outputFolderPath}/{vidName}"  
 
-    def CreateNewClip(self, _vidName = "", _outputFolder = ""):
+    def CreateNewClip(self, _vidName = "", _outputFolder = "", videoWidth = -1, videoHeight = -1):
         if _outputFolder == "":
             _outputFolder = self.outputPath
 
         videoFileName = os.path.basename(self.videoPath)
         vidName, vidFileExtension = os.path.splitext(videoFileName)
 
-        return CreateVideo(_outputFolder, f"{_vidName}.mp4", self.videoFps, self.videoWidth, self.videoHeight)
+        return CreateVideo(_outputFolder, f"{_vidName}.mp4", self.videoFps, self.videoWidth if videoWidth == -1 else videoWidth,
+                            self.videoHeight if videoHeight == -1 else videoHeight)
 
     def StopVideo(self):
         self.video.release()

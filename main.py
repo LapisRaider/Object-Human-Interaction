@@ -207,6 +207,8 @@ def main(args):
             # format data
             for person_id in tqdm(list(tracking_results.keys())):
                 humans[person_id] = PreProcessPersonData(None, tracking_results[person_id]['joints2d'], tracking_results[person_id]['frames'], person_id)
+
+            print("Ran pose detection for VIBE")
         else:
             # format object bounding box data detected from yolo to format for vibe
             for frameNo, objInFrame in objsInFrames.items():
@@ -220,9 +222,13 @@ def main(args):
                         # humans[obj.id].joints2D.append(obj.originalBbox)
                         humans[obj.id].frames.append(frameNo)
 
+            for humanId in humans.keys():
+                humans[humanId].bboxes = np.array(humans[humanId].bboxes).reshape((len(humans[humanId].bboxes), 4))
+                humans[humanId].frames = np.array(humans[humanId].frames)
+
+            print("Ran BBOX detection for VIBE")
+
         # Run VIBE
-        print("GUMAN")
-        print(tracking_results)
         smplParamCreator = VidSMPLParamCreator(args.input, configs["vibe_params"])
         humanRenderData = smplParamCreator.processPeopleInVid(humans.values(), videoDrawer.outputPath)
         
@@ -561,8 +567,8 @@ def render(_videoInfo, _humanRenderData, _objRenderData, _renderConfigs):
 
 
 if __name__ == "__main__":
-    refresh = True
-    video_name = "PassBallTwoHands"
+    refresh = False
+    video_name = "DropBallWalkForward"
 
     parser = argparse.ArgumentParser(description="Your application's description")
     if refresh == True:
